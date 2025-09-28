@@ -1,9 +1,16 @@
 <script setup>
-import TheWelcome from '../components/TheWelcome.vue'
+import HomeIntro from '@/components/HomeIntro.vue'
 </script>
 
 <template>
-  <main>
-    <TheWelcome />
+  <main class="home-shell">
+    <HomeIntro />
   </main>
 </template>
+
+<style scoped>
+.home-shell {
+  display: flex;
+  flex-direction: column;
+}
+</style>

@@ -84,10 +84,16 @@ const toggle = () => (collapsed.value = !collapsed.value)
       <header class="dash-header">
         <h1 class="page-title">Dashboard</h1>
         <div class="actions">
-          <button type="button" class="ghost-btn" disabled title="Solo diseño">Buscar</button>
-          <button type="button" class="primary-btn" disabled title="Solo diseño">
-            Nueva Factura
+          <button type="button" class="ghost-btn" disabled title="Pendiente de implementación">
+            Buscar
           </button>
+          <RouterLink
+            to="/dashboard/facturas/nueva"
+            class="primary-btn link-btn"
+            title="Crear nueva factura"
+          >
+            Nueva Factura
+          </RouterLink>
         </div>
       </header>
       <main class="dash-content">
@@ -319,6 +325,11 @@ export function icon(name) {
 }
 .primary-btn:hover {
   filter: brightness(1.05);
+}
+.link-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .dash-content {

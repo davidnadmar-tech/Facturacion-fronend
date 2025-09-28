@@ -35,6 +35,18 @@ const router = createRouter({
       component: () => import('../views/DashboardClientes.vue'),
       meta: { layout: 'dashboard', title: 'Clientes' },
     },
+    {
+      path: '/dashboard/facturas',
+      name: 'dashboard-facturas',
+      component: () => import('../views/DashboardFacturas.vue'),
+      meta: { layout: 'dashboard', title: 'Facturas' },
+    },
+    {
+      path: '/dashboard/facturas/nueva',
+      name: 'dashboard-facturas-nueva',
+      component: () => import('../views/DashboardFacturaNueva.vue'),
+      meta: { layout: 'dashboard', title: 'Nueva Factura' },
+    },
   ],
 })
 
