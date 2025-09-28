@@ -1,0 +1,39 @@
+@import './base.css';
+@import './utilities.css';
+
+/* Shell raíz (#app) ahora actúa como contenedor flexible ocupando ancho completo.
+   Ajustes reales en App.vue mediante clases de layout. */
+#app {
+  width: 100%;
+  margin: 0 auto;
+  font-weight: normal;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+/* Eliminamos layout grid antiguo. El responsive se maneja dentro de cada vista y en App.vue */
+
+/* Soporte preferencia reduce motion global pequeña mejora */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

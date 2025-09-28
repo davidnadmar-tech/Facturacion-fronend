@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Factura Rápida</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; }
+    h1 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+    .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+    label { font-weight: bold; margin-bottom: 5px; display: block; }
+    select, input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table th, table td { padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 14px; }
+    table th { background: #2c3e50; color: white; }
+    .totals { margin-top: 15px; display: flex; justify-content: flex-end; gap: 20px; font-size: 16px; }
+    .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: 0.3s; }
+    .btn-save { background: #27ae60; color: white; }
+    .btn-save:hover { background: #219150; }
+    .btn-secondary { background: #2c3e50; color: #fff; }
+    .btn-secondary:hover { background: #233444; }
+    .btn-danger { background: #c0392b; color: #fff; }
+    .btn-danger:hover { background: #992d22; }
+    .ticket { background: white; border: 1px dashed #666; padding: 15px; margin-top: 20px; border-radius: 8px; width: 300px; display: none; }
+    .ticket h2 { text-align: center; margin-bottom: 10px; font-size: 18px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: white; padding: 16px; border-radius: 10px; width: 380px; max-height: 70vh; overflow: auto; }
+    .list-item { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; }
+    .list-item:hover { background: #f6f8fb; }
+    .loader-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
+    .loader { border: 6px solid #f3f3f3; border-top: 6px solid #27ae60; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg);} }
+    .row-actions { display: flex; gap: 8px; justify-content: center; }
+    .comprobante-info { background: #e8f5e8; border-left: 4px solid #27ae60; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>⚡ Factura Rápida</h1>
+
+  <!-- Encabezado -->
+  <div class="card">
+    <div class="form-grid">
+      <div>
+        <label>Codigo</label>
+        <input type="text" id="codcliente" placeholder="Buscar cliente..." readonly onclick="abrirModalClientes()" />
+      </div>
+      <div>
+        <label>Cliente</label>
+        <input type="text" id="cliente" />
+      </div>
+
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="fecha" />
+      </div>
+      <div>
+        <label>Método de tiempo</label>
+        <select id="tipoTiempo" onchange="cambiarMetodoTiempo()">
+          <option value="1">Cálculo por entrada/salida</option>
+          <option value="2">Tiempo definido (minutos)</option>
+          <option value="3">Calculo Por Dia</option>
+        </select>
+      </div>
+      <div id="opHoraEntrada">
+        <label>Hora Entrada</label>
+        <input type="time" id="horaEntrada" />
+      </div>
+      <div id="opHoraSalida">
+        <label>Hora Salida</label>
+        <input type="time" id="horaSalida" onchange="calcularDesdeHoras()" />
+      </div>
+      <div id="opMinutos" style="display:none;">
+        <label>Minutos</label>
+        <input type="number" id="txtMinutos" min="0" value="0" oninput="recalcular()" />
+      </div>
+
+
+      <div id="dvPorDiaCant" style="display:none;">
+          <label>Dias</label>
+        <input type="number" id="txtDias" min="0" value="0" oninput="recalcular()" />
+      </div>
+
+      <div>
+        <label>Tipo Comprobante</label>
+        <select id="tipoFactura" onchange="mostrarNumeroComprobante()">
+          <option value="1">Consumidor Final</option>
+          <option value="2">Crédito Fiscal</option>
+        </select>
+      </div>
+      <div>
+        <label>Tipo de Pago</label>
+        <select id="tipoPago">
+          <option>EFECTIVO</option>
+          <option>TARJETA</option>
+          <option>TRANSFERENCIA</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Información del comprobante -->
+    <div id="comprobanteInfo" class="comprobante-info" style="display:none;">
+      <strong>Número de comprobante: </strong><span id="numeroComprobante"></span>
+    </div>
+  </div>
+
+  <!-- Detalle -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>Detalle</h3>
+      <button class="btn btn-secondary" onclick="abrirModalProductos(true)">➕ Agregar</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Item</th>
+          <th>Cantidad (Horas)</th>
+          <th>Precio</th>
+          <th>Total</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="detalle"></tbody>
+    </table>
+
+    <div class="totals">
+      <div>Gravado: <span id="gravado">$0.00</span></div>
+      <div>IVA: <span id="iva">$0.00</span></div>
+      <div>Total: <span id="total">$0.00</span></div>
+    </div>
+
+    <button class="btn btn-save" onclick="guardarFactura()">💾 Guardar Factura</button>
+  </div>
+
+  <!-- Ticket -->
+  <div class="ticket" id="ticket"></div>
+
+  <!-- Modal Clientes -->
+  <div class="modal" id="modalClientes"><div class="modal-content"><div id="listaClientes"></div></div></div>
+  <!-- Modal Productos -->
+  <div class="modal" id="modalProductos">
+  <div class="modal-content">
+    <input type="text" id="buscarProducto" placeholder="🔍 Buscar por código o nombre..." 
+           style="width:100%;padding:8px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;"
+           oninput="filtrarProductos()" />
+    <div id="listaProductos"></div>
+    <div style="margin-top:12px;">
+      <label>Cantidad</label>
+      <input type="number" id="cantidadProducto" min="0" value="0" 
+             style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc;" />
+    </div>
+  </div>
+</div>
+
+
+  <!-- Loader -->
+  <div class="loader-overlay" id="loader"><div class="loader"></div></div>
+
+
+<script>
+
+let detalle=[];let editIndex=null,agregarModo=false;
+let CLIENTES = JSON.parse(localStorage.getItem('clientes_v1')||'[]')
+
+var PRODUCTOS= JSON.parse(localStorage.getItem('productos_v1')||'[]');
+
+// Función para generar número de comprobante automático
+function generarNumeroComprobante(tipoFactura) {
+  const prefijo = tipoFactura === "1" ? "CF" : "CCF"; // CF = Consumidor Final, CCF = Crédito Fiscal
+  const fecha = new Date();
+  const año = fecha.getFullYear().toString().slice(-2);
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  
+  // Obtener contador desde localStorage
+  const keyContador = `contador_${prefijo}_${año}${mes}`;
+  let contador = parseInt(localStorage.getItem(keyContador) || "0") + 1;
+  
+  // Guardar nuevo contador
+  localStorage.setItem(keyContador, contador.toString());
+  
+  // Generar número con formato: PREFIJO-AAMM-000001
+  const numeroFormateado = String(contador).padStart(6, '0');
+  return `${numeroFormateado}`;
+}
+
+// Función para mostrar el número de comprobante que se asignará
+function mostrarNumeroComprobante() {
+  const tipoFactura = document.getElementById("tipoFactura").value;
+  const numeroComprobante = generarNumeroComprobante(tipoFactura);
+  
+  // Revertir el contador ya que solo queremos mostrar el próximo número
+  const prefijo = tipoFactura === "1" ? "CF" : "CCF";
+  const fecha = new Date();
+  const año = fecha.getFullYear().toString().slice(-2);
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const keyContador = `contador_${prefijo}_${año}${mes}`;
+  let contador = parseInt(localStorage.getItem(keyContador) || "1");
+  localStorage.setItem(keyContador, (contador - 1).toString());
+  
+  document.getElementById("numeroComprobante").textContent = numeroComprobante;
+  document.getElementById("comprobanteInfo").style.display = "block";
+}
+
+function toMoney(n){return "$"+n.toFixed(2);}
+function horasFacturadasDesdeMinutos(mins,p)
+{
+  // p puede ser undefined en algunos llamados; usar gracia por defecto 0
+  const grace = (p && (p.gracia !== undefined && p.gracia !== null)) ? parseInt(p.gracia) || 0 : 0;
+  let h = Math.floor(mins/60);
+  let m = mins % 60;
+  let res = m > grace ? h + 1 : h;
+  return res;
+}
+function minutosEntre(h1,h2){let a=new Date("2000-01-01 "+h1),b=new Date("2000-01-01 "+h2),d=(b-a)/60000;if(d<0)d+=1440;return Math.floor(d);}
+
+function cambiarMetodoTiempo()
+{
+  document.getElementById("opHoraEntrada").style.display =
+    document.getElementById("tipoTiempo").value==="1"?
+    "block":
+    "none";
+  document.getElementById("opHoraSalida").style.display=
+    document.getElementById("tipoTiempo").value==="1"?
+    "block":
+    "none";
+  document.getElementById("opMinutos").style.display = 
+    document.getElementById("tipoTiempo").value==="2"?
+    "block":
+    "none";
+
+  document.getElementById("dvPorDiaCant").style.display = 
+    document.getElementById("tipoTiempo").value==="3"?
+    "block":
+    "none";
+
+
+
+  recalcular();
+}
+
+
+function calcularDesdeHoras(){let e=document.getElementById("horaEntrada").value,s=document.getElementById("horaSalida").value;if(e&&s){document.getElementById("txtMinutos").value=minutosEntre(e,s);recalcular();}}
+
+function abrirModalClientes()
+{
+  let l=document.getElementById("listaClientes");
+  l.innerHTML=CLIENTES.map
+  (c=>
+  `<div class='list-item' onclick="seleccionarCliente('${c.codigo}','${c.nombre}')"><b>${c.codigo}</b> - ${c.nombre}</div>`).join("");
+  document.getElementById("modalClientes").style.display="flex";
+}
+
+function seleccionarCliente(c,n)
+{
+  document.getElementById("codcliente").value=`${c}`;
+  document.getElementById("cliente").value=`${n}`;
+  document.getElementById("modalClientes").style.display="none";
+}
+
+function abrirModalProductos(modoAgregar=false,index=null) {
+  agregarModo=modoAgregar;
+  editIndex=index;
+  listaFiltrada = PRODUCTOS; // reset
+  document.getElementById("buscarProducto").value = "";
+  document.getElementById("cantidadProducto").value = 0;
+  renderListaProductos();
+  document.getElementById("modalProductos").style.display="flex";
+}
+
+function renderListaProductos() {
+  document.getElementById("listaProductos").innerHTML =
+    listaFiltrada.map((p,i)=>`
+      <div class='list-item' onclick='seleccionarProducto(${JSON.stringify(p)},${agregarModo},${editIndex})'>
+        <b>${p.codigo}</b> - ${p.nombre} (${toMoney(p.precio)} ${p.mode=="hourly"?"/h":"fijo"})
+      </div>`).join("");
+}
+
+function filtrarProductos() {
+  const txt = document.getElementById("buscarProducto").value.toLowerCase();
+  listaFiltrada = PRODUCTOS.filter(p => 
+    p.codigo.toLowerCase().includes(txt) || p.nombre.toLowerCase().includes(txt));
+  renderListaProductos();
+}
+
+
+
+// Selección de producto con cantidad opcional
+function seleccionarProducto(p,modoAgregar,index) {
+  let minutos=parseInt(document.getElementById("txtMinutos").value||"0");
+  let horas=horasFacturadasDesdeMinutos(minutos,p);
+
+  let cantidadDigitada = parseInt(document.getElementById("cantidadProducto").value||"0");
+  let cantidadFinal = (cantidadDigitada && cantidadDigitada>0) 
+                      ? cantidadDigitada 
+                      : (p.mode=="hourly"?horas:1);
+  var tipotiem = document.getElementById("tipoTiempo").value;
+
+  const obj = {
+        codigo: p.codigo,
+        nombre: p.nombre,
+        tipo: p.value,
+        servicioHora: p.servicioHora,
+        gracia: p.gracia,
+        precio: tipotiem == "3"?p.preciodia:p.precio,
+        tipoCobro: p.tipoCobro.value,
+        cant: cantidadFinal,
+        mode: p.mode,
+        servicioDia: p.servicioDia,
+        preciodia: p.preciodia
+      };
+
+  if(modoAgregar) {
+    detalle.push({...p});
+  } else if(index!==null) {
+    detalle[index]={...p};
+  }
+  document.getElementById("modalProductos").style.display="none";
+  renderDetalle();
+}
+
+function eliminarItem(i){detalle.splice(i,1);renderDetalle();}
+
+
+function renderDetalle() {
+  let t=document.getElementById("detalle");t.innerHTML="";
+  let totalFactura=0;
+  detalle.forEach((it,i)=>{
+    let minutos = parseInt(document.getElementById("txtMinutos").value||"0");
+    let cant = it.cant || (it.mode=="hourly"?horasFacturadasDesdeMinutos(minutos, it):1);
+    let tot = cant*it.precio;
+    totalFactura+=tot;
+    t.innerHTML+=`<tr>
+      <td>${it.codigo}</td>
+      <td>${it.nombre}</td>
+      <td>${it.mode=="hourly"?cant:"–"}</td>
+      <td>${toMoney(it.precio)}</td>
+      <td>${toMoney(tot)}</td>
+      <td class='row-actions'>
+        <button class='btn btn-secondary' onclick='abrirModalProductos(false,${i})'>Editar</button>
+        <button class='btn btn-danger' onclick='eliminarItem(${i})'>X</button>
+      </td></tr>`;
+  });
+  let grav=totalFactura/1.13,iva=totalFactura-grav;
+  document.getElementById("gravado").textContent=toMoney(grav);
+  document.getElementById("iva").textContent=toMoney(iva);
+  document.getElementById("total").textContent=toMoney(totalFactura);
+}
+
+
+
+function recalcular() {
+  renderDetalle();
+}
+
+function guardarFactura()
+{
+  document.getElementById("loader").style.display="flex";
+  setTimeout
+  (()=>
+    {
+      // Generar número de comprobante automáticamente
+      const tipoFactura = document.getElementById("tipoFactura").value;
+      const numeroComprobante = generarNumeroComprobante(tipoFactura);
+      
+      const factura = {
+      codigoCliente: document.getElementById("codcliente").value,
+      cliente: document.getElementById("cliente").value,
+      fecha: document.getElementById("fecha").value,
+      tipoFactura: document.getElementById("tipoFactura").value,
+      tipoPago: document.getElementById("tipoPago").value,
+      numeroComprobante: numeroComprobante, // Nuevo campo agregado
+      detalle: detalle,
+      gravado: document.getElementById("gravado").textContent,
+      iva: document.getElementById("iva").textContent,
+      total: document.getElementById("total").textContent
+    };
+
+    // Guardar en localStorage
+    let facturas = JSON.parse(localStorage.getItem("FACTURAS") || "[]");
+    facturas.push(factura);
+    localStorage.setItem("FACTURAS", JSON.stringify(facturas));
+
+    // Generar PDF tipo ticket
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      unit: "mm",
+      format: [80, 150] // ancho ticket 80mm, alto flexible
+    });
+
+    let y = 10;
+    doc.setFontSize(12);
+    doc.text("Factura", 40, y, { align: "center" });
+    y += 6;
+    doc.setFontSize(8);
+    // Mostrar número de comprobante en el PDF
+    doc.text("Comprobante: " + numeroComprobante, 40, y, { align: "center" });
+    y += 6;
+    doc.setFontSize(9);
+    doc.text("Cliente: " + factura.cliente, 4, y); y += 5;
+    doc.text("Fecha: " + factura.fecha, 4, y); y += 5;
+    doc.text("Pago: " + factura.tipoPago, 4, y); y += 8;
+
+    // Encabezado detalle
+    doc.setFontSize(9);
+    doc.text("Item", 4, y);
+    doc.text("Cant", 45, y);
+    doc.text("Precio", 55, y);
+    y += 4;
+    doc.line(4, y, 76, y); y += 4;
+
+    // Items
+    factura.detalle.forEach(d => {
+      let cant = d.mode === "hourly" ? d.cant : "1";
+      doc.text(d.nombre.substring(0,35), 4, y);
+      doc.text(cant.toString(), 50, y);
+      doc.text("$" + d.precio.toFixed(2), 55, y);
+      y += 5;
+    });
+
+    y += 4;
+    doc.line(4, y, 76, y); y += 5;
+    doc.text("Gravado: " + factura.gravado, 4, y); y += 5;
+    doc.text("IVA: " + factura.iva, 4, y); y += 5;
+    doc.setFontSize(11);
+    doc.text("TOTAL: " + factura.total, 4, y); y += 10;
+
+    doc.setFontSize(9);
+    doc.text("Gracias por su compra", 40, y, { align: "center" });
+
+    // Mostrar PDF
+    doc.save(`Comprobante-${numeroComprobante}.pdf`);
+
+    // Mostrar ticket en pantalla con número de comprobante
+    document.getElementById("ticket").innerHTML = `
+      <h2>Ticket</h2>
+      <p><b>Comprobante:</b> ${numeroComprobante}</p>
+      <p><b>Cliente:</b> ${factura.cliente}</p>
+      <p><b>Fecha:</b> ${factura.fecha}</p>
+      <p><b>Total:</b> ${factura.total}</p>
+    `;
+    document.getElementById("ticket").style.display = "block";
+      document.getElementById("loader").style.display="none";
+      
+      // Mostrar mensaje de éxito
+      alert(`Factura guardada exitosamente con número: ${numeroComprobante}`);
+    },1000);
+}
+
+window.onload=()=>
+{
+  // Establecer fecha actual
+  document.getElementById("fecha").value = new Date().toISOString().split('T')[0];
+  
+  // Mostrar número de comprobante inicial
+  mostrarNumeroComprobante();
+  
+  renderDetalle();
+}
+
+// Cerrar modales al hacer clic fuera
+window.onclick = function(event) {
+  const modalClientes = document.getElementById("modalClientes");
+  const modalProductos = document.getElementById("modalProductos");
+  
+  if (event.target === modalClientes) {
+    modalClientes.style.display = "none";
+  }
+  if (event.target === modalProductos) {
+    modalProductos.style.display = "none";
+  }
+}
+</script>
+</body>
+</html>

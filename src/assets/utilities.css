@@ -1,0 +1,245 @@
+/* UTILIDADES DE DISEÑO (solo estilos genericos, sin colisión con componentes) */
+
+:root {
+  /* Duraciones */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 0.28s var(--ease-standard);
+}
+
+/* Display / Flex */
+.flex {
+  display: flex;
+}
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.gap-1 {
+  gap: var(--space-1);
+}
+.gap-2 {
+  gap: var(--space-2);
+}
+.gap-3 {
+  gap: var(--space-3);
+}
+.gap-4 {
+  gap: var(--space-4);
+}
+.gap-6 {
+  gap: var(--space-6);
+}
+
+/* Grid */
+.grid {
+  display: grid;
+}
+.grid-auto {
+  grid-auto-flow: row;
+}
+
+/* Spacing helpers */
+.p-0 {
+  padding: 0 !important;
+}
+.px-4 {
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+.py-4 {
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+.pt-4 {
+  padding-top: var(--space-4);
+}
+.pb-4 {
+  padding-bottom: var(--space-4);
+}
+.mt-4 {
+  margin-top: var(--space-4);
+}
+.mb-4 {
+  margin-bottom: var(--space-4);
+}
+.mt-6 {
+  margin-top: var(--space-6);
+}
+.mb-6 {
+  margin-bottom: var(--space-6);
+}
+
+/* Text */
+.text-xs {
+  font-size: var(--fz-xs);
+}
+.text-sm {
+  font-size: var(--fz-sm);
+}
+.text-base {
+  font-size: var(--fz-base);
+}
+.text-muted {
+  opacity: 0.7;
+}
+.text-accent {
+  color: var(--brand-primary);
+}
+.upper {
+  text-transform: uppercase;
+  letter-spacing: 0.75px;
+}
+
+/* Surfaces */
+.surface-card {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.surface-soft {
+  background: var(--color-background-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.surface-glow {
+  background: var(--color-background);
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+.surface-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--grad-soft-accent);
+  opacity: 0.55;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Elevation */
+.elev-0 {
+  box-shadow: none !important;
+}
+.elev-1 {
+  box-shadow: var(--shadow-xs) !important;
+}
+.elev-2 {
+  box-shadow: var(--shadow-sm) !important;
+}
+.elev-3 {
+  box-shadow: var(--shadow-md) !important;
+}
+.elev-4 {
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* Radius */
+.round-xs {
+  border-radius: var(--radius-xs);
+}
+.round-sm {
+  border-radius: var(--radius-sm);
+}
+.round-md {
+  border-radius: var(--radius-md);
+}
+.round-lg {
+  border-radius: var(--radius-lg);
+}
+.round-xl {
+  border-radius: var(--radius-xl);
+}
+.round-2xl {
+  border-radius: var(--radius-2xl);
+}
+
+/* Buttons básicos (solo para prototipado rápido) */
+.btn {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  font-size: var(--fz-sm);
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+.btn:hover {
+  background: var(--color-background-mute);
+}
+.btn-primary {
+  background: var(--grad-primary);
+  color: #fff;
+  border-color: var(--brand-primary);
+}
+.btn-primary:hover {
+  filter: brightness(1.05);
+}
+.btn-outline {
+  background: var(--color-background);
+}
+
+/* Utilities color states */
+.bg-accent-soft {
+  background: rgba(var(--brand-primary-rgb) / 0.12);
+}
+.text-success {
+  color: var(--brand-primary);
+}
+.text-danger {
+  color: #c93d3d;
+}
+
+/* Animations helpers */
+.fade-in {
+  animation: fade-in 0.6s var(--ease-standard) both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .surface-card,
+  .surface-soft,
+  .surface-glow {
+    background: var(--color-background-soft);
+  }
+  .btn-outline {
+    background: var(--color-background-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none !important;
+  }
+  .btn {
+    transition: none !important;
+  }
+}

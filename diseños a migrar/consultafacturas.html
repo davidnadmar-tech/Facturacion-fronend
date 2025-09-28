@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Listado de Facturas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #f0f4ff, #e0f7fa);
+      font-family: 'Segoe UI', sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      color: #0d47a1;
+      text-shadow: 1px 1px 2px rgba(0,0,0,.1);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .card {
+      border-radius: 1rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,.1);
+    }
+    .table thead {
+      background: #0d47a1;
+      color: #fff;
+    }
+    .table tbody tr:hover {
+      background: #e3f2fd;
+    }
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .filters > div {
+      flex: 1 1 180px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><i class="fa-solid fa-file-invoice-dollar"></i> Historial de Facturas</h1>
+
+    <div class="card p-3 mb-3">
+      <div class="filters">
+        <div>
+          <label class="form-label"># Comprobante</label>
+          <input type="number" id="filtroNumero" class="form-control" placeholder="Ej: 1">
+        </div>
+        <div>
+          <label class="form-label">Tipo Documento</label>
+          <select id="filtroTipo" class="form-select">
+            <option value="">-- Todos --</option>
+            <option value="1">Consumidor Final</option>
+            <option value="2">Crédito Fiscal</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Fecha desde</label>
+          <input type="date" id="filtroDesde" class="form-control">
+        </div>
+        <div>
+          <label class="form-label">Fecha hasta</label>
+          <input type="date" id="filtroHasta" class="form-control">
+        </div>
+        <div class="align-self-end">
+          <button class="btn btn-outline-primary w-100" onclick="filtrarFacturas()">
+            <i class="fa-solid fa-filter"></i> Filtrar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle" id="tablaFacturas">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Cliente</th>
+              <th>Fecha</th>
+              <th>Tipo Doc.</th>
+              <th>Tipo Pago</th>
+              <th>Total</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    let facturas = JSON.parse(localStorage.getItem("FACTURAS") || "[]");
+
+    function renderTabla(list) {
+      const tbody = document.querySelector("#tablaFacturas tbody");
+      tbody.innerHTML = "";
+      list.forEach((f, i) => {
+        const tipoDoc = f.tipoFactura == "1" ? "Consumidor Final" : "Crédito Fiscal";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${f.cliente}</td>
+          <td>${f.fecha}</td>
+          <td>${tipoDoc}</td>
+          <td>${f.tipoPago}</td>
+          <td>${f.total}</td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="verFactura(${i})"><i class="fa-solid fa-eye"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="eliminarFactura(${i})"><i class="fa-solid fa-trash"></i></button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filtrarFacturas() {
+      const num = document.getElementById("filtroNumero").value;
+      const tipo = document.getElementById("filtroTipo").value;
+      const desde = document.getElementById("filtroDesde").value;
+      const hasta = document.getElementById("filtroHasta").value;
+
+      let filtradas = facturas.map((f, i) => ({...f, index: i})); // guardar índice original
+
+      if (num) {
+        filtradas = filtradas.filter(f => f.index + 1 == num);
+      }
+      if (tipo) {
+        filtradas = filtradas.filter(f => f.tipoFactura == tipo);
+      }
+      if (desde) {
+        filtradas = filtradas.filter(f => f.fecha >= desde);
+      }
+      if (hasta) {
+        filtradas = filtradas.filter(f => f.fecha <= hasta);
+      }
+
+      renderTabla(filtradas);
+    }
+
+    function verFactura(i) {
+      const f = facturas[i];
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: "mm", format: [80, 200] });
+      let y = 10;
+
+      doc.setFontSize(12);
+      doc.text("Factura", 40, y, { align: "center" });
+      y += 6;
+       doc.setFontSize(8);
+      // Mostrar número de comprobante en el PDF
+      doc.text("Comprobante: " + f.numeroComprobante, 40, y, { align: "center" });
+      y += 6;
+      doc.setFontSize(9);
+      doc.text("Cliente: " + f.cliente, 4, y); y += 5;
+      doc.text("Fecha: " + f.fecha, 4, y); y += 5;
+      doc.text("Pago: " + f.tipoPago, 4, y); y += 8;
+
+      doc.setFontSize(9);
+      doc.text("Item", 4, y);
+      doc.text("Cant", 45, y);
+      doc.text("Precio", 55, y);
+      y += 4;
+      doc.line(4, y, 76, y); y += 4;
+
+      f.detalle.forEach(d => {
+        const cant = d.mode === "hourly" ? d.cant : "1";
+        const tot = d.mode === "hourly" ? d.precio : d.precio;
+        doc.text(d.nombre.substring(0,35), 4, y);
+        doc.text(cant.toString(), 50, y);
+        doc.text("$" + d.precio.toFixed(2), 55, y);
+        //doc.text("$" + tot.toFixed(2), 65, y);
+        y += 5;
+      });
+
+      y += 4;
+      doc.line(4, y, 76, y); y += 5;
+      doc.text("Gravado: " + f.gravado, 4, y); y += 5;
+      doc.text("IVA: " + f.iva, 4, y); y += 5;
+      doc.setFontSize(11);
+      doc.text("TOTAL: " + f.total, 4, y); y += 10;
+      doc.setFontSize(9);
+      doc.text("Gracias por su compra", 40, y, { align: "center" });
+
+      doc.save("factura_" + (i+1) + ".pdf");
+      location.reload();
+    }
+
+    function eliminarFactura(i) {
+      if (confirm("¿Eliminar esta factura?")) {
+        facturas.splice(i,1);
+        localStorage.setItem("FACTURAS", JSON.stringify(facturas));
+        renderTabla(facturas);
+      }
+    }
+
+    // Inicializar
+    renderTabla(facturas);
+  </script>
+</body>
+</html>
