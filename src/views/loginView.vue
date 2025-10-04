@@ -24,7 +24,7 @@
           <h2 id="loginTitle">Iniciar sesión</h2>
           <p class="subtitle">Accede a tu cuenta para gestionar tus comprobantes</p>
         </header>
-        <form class="login-form" @submit.prevent>
+        <form class="login-form" @submit.prevent="onSubmit">
           <div class="field-group">
             <label for="email">Correo electrónico</label>
             <input
@@ -32,6 +32,8 @@
               type="email"
               placeholder="tucorreo@empresa.com"
               autocomplete="username"
+              v-model.trim="identity"
+              :disabled="auth.cargando"
             />
           </div>
           <div class="field-group">
@@ -41,6 +43,8 @@
               type="password"
               placeholder="••••••••"
               autocomplete="current-password"
+              v-model="password"
+              :disabled="auth.cargando"
             />
           </div>
           <div class="options-row">
@@ -52,13 +56,15 @@
               >¿Olvidaste tu contraseña?</a
             >
           </div>
-          <button class="btn-primary" type="submit" disabled title="Solo diseño por ahora">
-            Ingresar
+          <button class="btn-primary" type="submit" :disabled="auth.cargando">
+            <span v-if="!auth.cargando">Ingresar</span>
+            <span v-else>Ingresando…</span>
           </button>
           <div class="divider" role="separator" aria-label="O"></div>
           <button class="btn-outline" type="button" disabled title="Solo diseño por ahora">
             Ingresar con certificado
           </button>
+          <p v-if="errorMsg" class="error-msg" role="alert">{{ errorMsg }}</p>
         </form>
         <p class="legal-text">
           Al continuar aceptas los <a href="#" tabindex="-1">términos</a> y la
@@ -70,7 +76,36 @@
 </template>
 
 <script setup>
-// Solo presentación: no se implementa lógica todavía.
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
+const auth = useAuthStore()
+const { isAuthenticated } = storeToRefs(auth)
+
+const identity = ref('')
+const password = ref('')
+const errorMsg = ref('')
+
+onMounted(() => {
+  auth.cargarLocal()
+  if (isAuthenticated.value) {
+    router.replace({ name: 'dashboard-home' })
+  }
+})
+
+async function onSubmit() {
+  errorMsg.value = ''
+  const res = await auth.login({ identity: identity.value, password: password.value })
+  if (res.ok) {
+    const redirect = router.currentRoute.value.query.redirect || { name: 'dashboard-home' }
+    router.replace(redirect)
+  } else {
+    errorMsg.value = res.error || 'No se pudo iniciar sesión'
+  }
+}
 </script>
 
 <style scoped>
@@ -316,7 +351,7 @@
   padding: 0.95rem 1.15rem;
   border-radius: 16px;
   border: none;
-  cursor: not-allowed; /* Solo diseño */
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -397,6 +432,12 @@
 
 .legal-text a:hover {
   text-decoration: underline;
+}
+
+.error-msg {
+  margin-top: 0.75rem;
+  color: var(--vt-c-text-danger, #b00020);
+  font-size: 0.85rem;
 }
 
 /* Animaciones */

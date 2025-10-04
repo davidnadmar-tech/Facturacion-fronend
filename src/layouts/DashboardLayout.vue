@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { ref, computed } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const collapsed = ref(false)
 const route = useRoute()
@@ -17,6 +18,25 @@ const secondary = [{ label: 'Configuración', to: '/dashboard/configuracion', ic
 const isActive = (to) => route.path === to
 
 const toggle = () => (collapsed.value = !collapsed.value)
+const router = useRouter()
+const auth = useAuthStore()
+
+const onLogout = async () => {
+  const r = await auth.signOut()
+  if (r.ok) router.replace({ name: 'login' })
+}
+
+const displayName = computed(() => auth.user?.name || auth.user?.email || 'Usuario')
+const initials = computed(() => {
+  const n = (auth.user?.name || auth.user?.email || 'U').trim()
+  const parts = n.split(/[\s.@_+-]+/).filter(Boolean)
+  const first = parts[0]?.[0] || 'U'
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : ''
+  return (first + last).toUpperCase()
+})
+const userMenuOpen = ref(false)
+const toggleUserMenu = () => (userMenuOpen.value = !userMenuOpen.value)
+const closeUserMenu = () => (userMenuOpen.value = false)
 </script>
 
 <template>
@@ -94,6 +114,34 @@ const toggle = () => (collapsed.value = !collapsed.value)
           >
             Nueva Factura
           </RouterLink>
+          <div class="user-box" @keydown.escape.prevent.stop="closeUserMenu">
+            <button
+              type="button"
+              class="user-btn"
+              @click="toggleUserMenu"
+              :aria-expanded="userMenuOpen"
+            >
+              <span class="avatar" aria-hidden="true">{{ initials }}</span>
+              <span class="name">{{ displayName }}</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" class="chev">
+                <path d="M7 10l5 5 5-5H7z" fill="currentColor" />
+              </svg>
+            </button>
+            <div v-if="userMenuOpen" class="user-menu" @click.stop>
+              <RouterLink to="/dashboard/configuracion" class="um-item" @click="closeUserMenu">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path :d="icon('user')" fill="currentColor" />
+                </svg>
+                <span>Mi perfil</span>
+              </RouterLink>
+              <button type="button" class="um-item" @click="onLogout">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path :d="icon('logout')" fill="currentColor" />
+                </svg>
+                <span>Cerrar sesión</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
       <main class="dash-content">
@@ -115,6 +163,8 @@ export function icon(name) {
     chart: 'M4 20V9h3v11H4Zm6 0V4h3v16h-3Zm6 0v-8h3v8h-3Z',
     settings:
       'M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7ZM4 13.2v-2.4l2.06-.32a6 6 0 0 1 .6-1.46l-1.2-1.7 1.7-1.7 1.7 1.2a6 6 0 0 1 1.46-.6L10.8 4h2.4l.32 2.06a6 6 0 0 1 1.46.6l1.7-1.2 1.7 1.7-1.2 1.7a6 6 0 0 1 .6 1.46L20 10.8v2.4l-2.06.32a6 6 0 0 1-.6 1.46l1.2 1.7-1.7 1.7-1.7-1.2a6 6 0 0 1-1.46.6L13.2 20h-2.4l-.32-2.06a6 6 0 0 1-1.46-.6l-1.7 1.2-1.7-1.7 1.2-1.7a6 6 0 0 1-.6-1.46L4 13.2Z',
+    user: 'M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z',
+    logout: 'M16 17v-3H8v-4h8V7l5 5-5 5Zm-2 4H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9v2H5v14h9v2Z',
   }
   return paths[name] || ''
 }
@@ -330,6 +380,71 @@ export function icon(name) {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+}
+
+.user-box {
+  position: relative;
+}
+.user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-mute);
+  color: var(--color-heading);
+  padding: 0.45rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.user-btn:hover {
+  filter: brightness(1.02);
+}
+.user-btn .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: linear-gradient(135deg, #36c6a8, #0aa57c);
+}
+.user-btn .name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.user-btn .chev {
+  opacity: 0.7;
+}
+.user-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  border-radius: 12px;
+  min-width: 180px;
+  padding: 0.35rem;
+  z-index: 50;
+}
+.um-item {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-heading);
+  text-decoration: none;
+  cursor: pointer;
+}
+.um-item:hover {
+  background: var(--color-background-soft);
 }
 
 .dash-content {

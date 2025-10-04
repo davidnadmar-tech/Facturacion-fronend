@@ -1,5 +1,11 @@
 <script setup>
 // Solo diseño estático por ahora
+import ParticleField from './ParticleField.vue'
+import { storeToRefs } from 'pinia'
+import { useUiStore } from '@/stores/ui'
+const ui = useUiStore()
+ui.cargarLocal()
+const { particlesEnabled, particleLines, particleMode } = storeToRefs(ui)
 const redes = [
   { name: 'LinkedIn', url: '#', icon: 'linkedin' },
   { name: 'Facebook', url: '#', icon: 'facebook' },
@@ -23,6 +29,15 @@ function icon(name) {
 
 <template>
   <section class="home-hero" aria-label="Bienvenida">
+    <ParticleField
+      :count="70"
+      :colors="['#27b1ff', '#0a6fb8', '#0a92d6']"
+      :maxSpeed="0.18"
+      :enabled="particlesEnabled"
+      :link-lines="particleLines"
+      :mode="particleMode"
+      class="p-bg"
+    />
     <div class="hero-inner">
       <div class="brand-block">
         <div class="logo-wrap" aria-hidden="true">
@@ -68,6 +83,28 @@ function icon(name) {
         <p class="hero-tag">Optimización inteligente y automatización a tu alcance.</p>
       </div>
       <div class="hero-copy">
+        <div class="fx-toggles" aria-label="Controles visuales">
+          <!-- <label class="t-item"
+            ><input type="checkbox" v-model="particlesEnabled" @change="ui.persistir()" />
+            Partículas</label
+          >
+          <label class="t-item"
+            ><input
+              type="checkbox"
+              v-model="particleLines"
+              @change="ui.persistir()"
+              :disabled="!particlesEnabled"
+            />
+            Líneas</label
+          >
+          <label class="t-item mode-sel"
+            >Modo
+            <select v-model="particleMode" @change="ui.persistir()">
+              <option value="normal">Normal</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </label> -->
+        </div>
         <p>
           Bienvenido a la plataforma de facturación. Este entorno unifica emisión, control y
           análisis de comprobantes, ofreciendo una experiencia ágil mientras avanzamos hacia la
@@ -121,6 +158,16 @@ function icon(name) {
   flex-direction: column;
   gap: 2.5rem;
 }
+.home-hero :deep(.particle-wrapper) {
+  z-index: 0;
+}
+.hero-inner,
+.home-panels,
+.brand-block,
+.hero-copy {
+  position: relative;
+  z-index: 2;
+}
 .hero-inner {
   display: grid;
   gap: 2.5rem;
@@ -161,6 +208,34 @@ function icon(name) {
 }
 .hero-copy p {
   margin: 0;
+}
+.fx-toggles {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.85;
+}
+.fx-toggles .t-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--color-background-soft);
+  padding: 0.35rem 0.6rem 0.3rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+}
+.fx-toggles .mode-sel select {
+  font-size: 0.6rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-mute);
+}
+.fx-toggles input {
+  accent-color: var(--brand-primary);
 }
 .social {
   display: flex;

@@ -8,6 +8,12 @@
 // =============================================================
 
 // Hero principal (título y subtítulo)
+import ParticleField from '@/components/ParticleField.vue'
+import { storeToRefs } from 'pinia'
+import { useUiStore } from '@/stores/ui'
+const ui = useUiStore()
+ui.cargarLocal()
+const { particlesEnabled, particleLines, particleMode } = storeToRefs(ui)
 const hero = {
   title: 'Acerca de Blue Dragonfly Automation',
   tagline: 'Impulsamos la eficiencia mediante automatización, simplicidad y escalabilidad segura.',
@@ -91,12 +97,42 @@ const cta = {
   <div class="about-page">
     <!-- SECTION: Hero -->
     <section class="about-hero surface-soft">
+      <ParticleField
+        :count="60"
+        :maxSpeed="0.16"
+        :colors="['#0aa57c', '#0fbf9d', '#0a8fdd']"
+        :enabled="particlesEnabled"
+        :link-lines="particleLines"
+        :mode="particleMode"
+      />
       <div class="hero-content">
         <h1 class="hero-title">
           {{ hero.title }}
         </h1>
         <p class="hero-tagline">{{ hero.tagline }}</p>
         <p class="hero-intro">{{ hero.intro }}</p>
+        <div class="fx-toggles" aria-label="Controles visuales">
+          <!-- <label class="t-item"
+            ><input type="checkbox" v-model="particlesEnabled" @change="ui.persistir()" />
+            Partículas</label
+          >
+          <label class="t-item"
+            ><input
+              type="checkbox"
+              v-model="particleLines"
+              @change="ui.persistir()"
+              :disabled="!particlesEnabled"
+            />
+            Líneas</label
+          > -->
+          <!-- <label class="t-item mode-sel"
+            >Modo
+            <select v-model="particleMode" @change="ui.persistir()">
+              <option value="normal">Normal</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </label> -->
+        </div>
         <nav class="mini-nav" aria-label="Secciones de la página">
           <a href="#mision-vision">Misión & Visión</a>
           <a href="#valores">Valores</a>
@@ -192,6 +228,14 @@ const cta = {
   display: grid;
   gap: 2rem;
 }
+.about-hero :deep(.particle-wrapper) {
+  z-index: 1;
+}
+.about-hero .hero-content,
+.about-hero .mini-nav {
+  position: relative;
+  z-index: 2;
+}
 .hero-content {
   max-width: 880px;
   position: relative;
@@ -213,6 +257,35 @@ const cta = {
   max-width: 60ch;
   font-size: 0.95rem;
   line-height: 1.5;
+}
+.fx-toggles {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.85;
+  margin-bottom: 0.6rem;
+}
+.fx-toggles .t-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--color-background-soft);
+  padding: 0.35rem 0.6rem 0.3rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+}
+.fx-toggles .mode-sel select {
+  font-size: 0.55rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-mute);
+}
+.fx-toggles input {
+  accent-color: var(--brand-primary);
 }
 
 .mini-nav {
@@ -240,14 +313,7 @@ const cta = {
   color: #fff;
 }
 
-.hero-accent {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 15%, rgba(39, 177, 255, 0.25), transparent 60%),
-    radial-gradient(circle at 80% 70%, rgba(10, 146, 214, 0.25), transparent 60%);
-  pointer-events: none;
-}
+/* hero-accent sustituido por partículas; si deseas conservarlo, reinsertar bloque anterior */
 
 /* Misión / Visión */
 .mv-grid {

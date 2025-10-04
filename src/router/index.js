@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
@@ -48,6 +49,20 @@ const router = createRouter({
       meta: { layout: 'dashboard', title: 'Nueva Factura' },
     },
   ],
+})
+
+// Guard global básico
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  auth.cargarLocal()
+  const isPublic = to.meta?.public === true
+  const requiresAuth = to.meta?.layout === 'dashboard' && !isPublic
+  if (requiresAuth && !auth.isAuthenticated && to.name !== 'login') {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.name === 'login' && auth.isAuthenticated) {
+    return { name: 'dashboard-home' }
+  }
 })
 
 export default router
