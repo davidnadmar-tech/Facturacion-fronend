@@ -10,6 +10,7 @@ const menu = [
   { label: 'Resumen', to: '/dashboard', icon: 'grid' },
   { label: 'Facturas', to: '/dashboard/facturas', icon: 'doc' },
   { label: 'Clientes', to: '/dashboard/clientes', icon: 'users' },
+  { label: 'Productos', to: '/dashboard/productos', icon: 'shopping-cart' },
   { label: 'Reportes', to: '/dashboard/reportes', icon: 'chart' },
 ]
 
