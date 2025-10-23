@@ -1,6 +1,7 @@
 import { setActivePinia, createPinia } from 'pinia'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useFacturasStore, generarCodigoFactura } from '../facturas'
+import api from '@/api/axiosConection'
 
 // Mock localStorage simple en memoria
 const mem = {}
@@ -25,6 +26,10 @@ describe('store facturas', () => {
     lsMock.clear()
     lsMock.getItem.mockClear()
     lsMock.setItem.mockClear()
+    // mock API por defecto
+    vi.spyOn(api, 'post').mockResolvedValue({
+      data: { Estado: 2, Contenido: { record: { id: 'fac-1' } } },
+    })
   })
 
   it('generarCodigoFactura genera secuencia correcta', () => {
@@ -33,9 +38,9 @@ describe('store facturas', () => {
     expect(generarCodigoFactura('F0099')).toBe('F0100')
   })
 
-  it('emitir rechaza factura sin items', () => {
+  it('emitir rechaza factura sin items', async () => {
     const s = useFacturasStore()
-    const r = s.emitir({
+    const r = await s.emitir({
       fecha: '2025-09-28',
       cliente: { nombre: 'Cliente X' },
       items: [],
@@ -44,9 +49,9 @@ describe('store facturas', () => {
     expect(r.errores.items).toBeDefined()
   })
 
-  it('emitir factura válida y persiste', () => {
+  it('emitir factura válida y persiste', async () => {
     const s = useFacturasStore()
-    const r = s.emitir({
+    const r = await s.emitir({
       fecha: '2025-09-28',
       cliente: { nombre: 'Cliente Y', nit: '0614-290112-101-1' },
       items: [{ descripcion: 'Servicio', cantidad: 1, precio: 100, tipo: 'gravado' }],
@@ -64,9 +69,9 @@ describe('store facturas', () => {
     expect(lsMock.setItem).toHaveBeenCalled()
   })
 
-  it('eliminar factura existente', () => {
+  it('eliminar factura existente', async () => {
     const s = useFacturasStore()
-    const creado = s.emitir({
+    const creado = await s.emitir({
       fecha: '2025-09-28',
       cliente: { nombre: 'Cliente Z' },
       items: [{ descripcion: 'Prod', cantidad: 2, precio: 50, tipo: 'gravado' }],
@@ -79,15 +84,15 @@ describe('store facturas', () => {
     expect(s.total).toBe(0)
   })
 
-  it('filtradas busca por código y nombre cliente', () => {
+  it('filtradas busca por código y nombre cliente', async () => {
     const s = useFacturasStore()
-    s.emitir({
+    await s.emitir({
       fecha: '2025-09-28',
       cliente: { nombre: 'Panaderia Central' },
       items: [{ descripcion: 'Harina', cantidad: 3, precio: 10, tipo: 'gravado' }],
       montos: { gravado: 30, exento: 0, noSujeto: 0, iva: 3.9, subtotal: 30, total: 33.9 },
     })
-    s.emitir({
+    await s.emitir({
       fecha: '2025-09-28',
       cliente: { nombre: 'Ferreteria Lopez' },
       items: [{ descripcion: 'Martillo', cantidad: 1, precio: 15, tipo: 'exento' }],

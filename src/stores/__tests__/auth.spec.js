@@ -10,12 +10,12 @@ const ls = {
 }
 Object.defineProperty(globalThis, 'localStorage', { value: ls })
 
-// Mock del api de axios conectado
-const postMock = vi.fn()
-const apiMock = {
-  post: postMock,
-  defaults: { headers: { common: {} } },
-}
+// Mock del api de axios conectado (usar vi.hoisted para variables usadas en factory)
+const { postMock, apiMock } = vi.hoisted(() => {
+  const postMock = vi.fn()
+  const apiMock = { post: postMock, defaults: { headers: { common: {} } } }
+  return { postMock, apiMock }
+})
 vi.mock('@/api/axiosConection', () => ({ default: apiMock }))
 
 // Importar después del mock

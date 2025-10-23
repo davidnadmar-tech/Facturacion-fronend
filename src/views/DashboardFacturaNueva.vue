@@ -1,26 +1,53 @@
 <script setup>
-// Solo UI (sin lógica de persistencia todavía)
+// Emisión de factura con integración a stores (facturas/clientes)
 // Formato adaptado a factura / comprobante El Salvador (IVA 13%)
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useFacturasStore } from '@/stores/facturas'
+import { useClientesStore } from '@/stores/clientes'
+import { useCatalogosStore } from '@/stores/catalogos'
 
 // Asunciones (pueden ajustarse luego):
 // - Precio ingresado es base (sin IVA) para líneas Gravadas.
 // - Para Exento y No Sujeto no se calcula IVA.
 // - Tipo de documento afecta potencialmente validaciones futuras (por ahora solo UI).
 
+const router = useRouter()
+const facturasStore = useFacturasStore()
+const clientesStore = useClientesStore()
+const catalogosStore = useCatalogosStore()
+
 const numeroControl = ref('NC-00000001') // Placeholder (normalmente backend)
 const serie = ref('A001')
 const fecha = ref(new Date().toISOString().substring(0, 10))
-const tipoDocumento = ref('credito_fiscal') // credito_fiscal | consumidor_final | factura
-const cliente = ref('')
+// Tipo de documento: proviene de catálogo (tipos de factura)
+const tipoDocumentoId = ref('')
+// Cliente: selección desde store de clientes + alta rápida
+const busquedaCliente = ref('')
+const clienteSeleccionado = ref(null) // objeto del store clientes
+const cliente = ref('') // fallback visual
 const nit = ref('')
 const nrc = ref('')
 const giro = ref('')
 const direccion = ref('')
 const municipio = ref('')
 const departamento = ref('')
-const condicionPago = ref('contado') // contado | credito
+const formaPagoId = ref('')
 const diasCredito = ref(30)
+const formasPago = computed(() => catalogosStore.formasPagoOrdenadas)
+const formaPagoSeleccionada = computed(() => catalogosStore.formaPagoPorId(formaPagoId.value))
+const esCredito = computed(() =>
+  (formaPagoSeleccionada.value?.name || '').toLowerCase().includes('credito'),
+)
+const tiposFactura = computed(() => catalogosStore.tiposFacturaOrdenados)
+
+// Establecimientos y puntos de venta
+const establecimientoId = ref('')
+const puntoVentaId = ref('')
+const establecimientos = computed(() => catalogosStore.establecimientosOrdenados)
+const puntosVenta = computed(() =>
+  catalogosStore.puntosVentaDeEstablecimiento(establecimientoId.value),
+)
 
 const items = ref([
   { id: 1, descripcion: '', cantidad: 1, precio: 0, tipo: 'gravado' }, // tipo: gravado|exento|no_sujeto
@@ -82,11 +109,111 @@ onMounted(() => {
     if (entries[0]) summaryVisible.value = entries[0].isIntersecting
   })
   if (summaryRef.value) observer.observe(summaryRef.value)
+  // cargar clientes para selector inicial
+  clientesStore.cargarClientes('')
+  // cargar formas de pago
+  catalogosStore.cargarFormasPago({})
+  // cargar establecimientos
+  catalogosStore.cargarEstablecimientos({})
+  // cargar tipos de factura
+  catalogosStore.cargarTiposFactura({})
 })
 onUnmounted(() => {
   window.removeEventListener('scroll', onScroll)
   if (observer && summaryRef.value) observer.unobserve(summaryRef.value)
 })
+
+// Sincronizar campos visibles cuando cambia el cliente seleccionado
+watch(
+  () => clienteSeleccionado.value,
+  (c) => {
+    if (!c) return
+    cliente.value = c.nombre || ''
+    nit.value = c.nit || ''
+    nrc.value = c.nrc || ''
+    giro.value = c.descripcionActividad || c.actividadNombre || ''
+    // Campos dirección (si existen en el modelo)
+    departamento.value = c.departamentoNombre || ''
+    municipio.value = c.municipioNombre || ''
+  },
+)
+
+function seleccionarClientePorCodigo(codigo) {
+  const c = clientesStore.clientes.find((x) => x.codigo === codigo)
+  if (c) clienteSeleccionado.value = c
+}
+
+async function buscarClientes() {
+  await clientesStore.cargarClientes(busquedaCliente.value || '')
+}
+
+// Alta rápida de cliente
+const mostrarModalCliente = ref(false)
+const clienteForm = ref({ nombre: '', nit: '', nrc: '', email: '', descripcionActividad: '' })
+const clienteErrores = ref({})
+
+function abrirNuevoCliente() {
+  clienteForm.value = { nombre: '', nit: '', nrc: '', email: '', descripcionActividad: '' }
+  clienteErrores.value = {}
+  mostrarModalCliente.value = true
+}
+function cerrarModalCliente() {
+  mostrarModalCliente.value = false
+}
+async function crearClienteDesdeModal() {
+  const res = await clientesStore.crearCliente(clienteForm.value)
+  if (!res.ok) {
+    clienteErrores.value = res.errores || { general: res.error || 'Error al guardar' }
+    return
+  }
+  clienteSeleccionado.value = res.item
+  mostrarModalCliente.value = false
+}
+
+// Emitir factura
+const enviando = computed(() => facturasStore.enviando)
+const errorEnvio = computed(() => facturasStore.error)
+
+async function emitirFactura() {
+  const datos = {
+    fecha: fecha.value,
+    tipoDocumentoId: tipoDocumentoId.value || undefined,
+    cliente: clienteSeleccionado.value
+      ? {
+          nombre: clienteSeleccionado.value.nombre,
+          codigo: clienteSeleccionado.value.codigo,
+          backendId: clienteSeleccionado.value.backendId,
+        }
+      : { nombre: cliente.value, codigo: null, backendId: null },
+    formaPago: formaPagoSeleccionada.value
+      ? {
+          id: formaPagoSeleccionada.value.id,
+          name: formaPagoSeleccionada.value.name,
+          codigoCFE: formaPagoSeleccionada.value.codigoCFE,
+        }
+      : null,
+    PUNTO_VENTA: puntoVentaId.value || undefined,
+    diasCredito: esCredito.value ? Number(diasCredito.value || 0) : undefined,
+    items: items.value.map((i) => ({
+      descripcion: i.descripcion,
+      cantidad: i.cantidad,
+      precio: i.precio,
+      tipo: i.tipo,
+    })),
+    montos: {
+      gravado: gravadoBase.value,
+      exento: exento.value,
+      noSujeto: noSujeto.value,
+      iva: iva.value,
+      subtotal: subtotalGeneral.value,
+      total: total.value,
+    },
+  }
+  const res = await facturasStore.emitir(datos)
+  if (!res.ok) return
+  // Redirigir a listado de facturas
+  router.push('/dashboard/facturas')
+}
 </script>
 
 <template>
@@ -113,27 +240,47 @@ onUnmounted(() => {
             </div>
             <div class="field">
               <label>Tipo Documento</label>
-              <select v-model="tipoDocumento">
-                <option value="credito_fiscal">Crédito Fiscal</option>
-                <option value="consumidor_final">Consumidor Final</option>
-                <option value="factura">Factura</option>
+              <select v-model="tipoDocumentoId">
+                <option value="">Seleccione</option>
+                <option v-for="t in tiposFactura" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
             </div>
             <div class="field span-2">
               <label>Cliente / Razón Social</label>
-              <input v-model="cliente" type="text" placeholder="Buscar o ingresar cliente" />
+              <div class="cliente-picker">
+                <input
+                  v-model="busquedaCliente"
+                  type="text"
+                  placeholder="Buscar cliente por nombre, NIT, NRC"
+                  @keyup.enter="buscarClientes"
+                />
+                <button class="mini-btn" type="button" @click="buscarClientes">Buscar</button>
+              </div>
+              <div class="cliente-select">
+                <select
+                  :value="clienteSeleccionado?.codigo || ''"
+                  @change="(e) => seleccionarClientePorCodigo(e.target.value)"
+                >
+                  <option value="">Seleccione un cliente</option>
+                  <option v-for="c in clientesStore.clientes" :key="c.codigo" :value="c.codigo">
+                    {{ c.nombre }}
+                    {{ c.nit ? ` · NIT ${c.nit}` : '' }}
+                  </option>
+                </select>
+                <button class="mini-btn" type="button" @click="abrirNuevoCliente">Agregar</button>
+              </div>
             </div>
             <div class="field">
               <label>NIT</label>
-              <input v-model="nit" type="text" />
+              <input v-model="nit" type="text" readonly />
             </div>
             <div class="field">
               <label>NRC</label>
-              <input v-model="nrc" type="text" />
+              <input v-model="nrc" type="text" readonly />
             </div>
             <div class="field">
-              <label>Giro</label>
-              <input v-model="giro" type="text" />
+              <label>Giro (Actividad Económica)</label>
+              <input v-model="giro" type="text" readonly />
             </div>
             <div class="field span-2">
               <label>Dirección</label>
@@ -148,15 +295,32 @@ onUnmounted(() => {
               <input v-model="departamento" type="text" />
             </div>
             <div class="field">
-              <label>Condición Pago</label>
-              <select v-model="condicionPago">
-                <option value="contado">Contado</option>
-                <option value="credito">Crédito</option>
+              <label>Forma de Pago</label>
+              <select v-model="formaPagoId">
+                <option value="">Seleccione</option>
+                <option v-for="fp in formasPago" :key="fp.id" :value="fp.id">{{ fp.name }}</option>
               </select>
             </div>
-            <div class="field" v-if="condicionPago === 'credito'">
+            <div class="field" v-if="esCredito">
               <label>Días Crédito</label>
               <input v-model.number="diasCredito" type="number" min="1" />
+            </div>
+            <div class="field">
+              <label>Establecimiento</label>
+              <select v-model="establecimientoId">
+                <option value="">Seleccione</option>
+                <option v-for="e in establecimientos" :key="e.id" :value="e.id">
+                  {{ e.name }}
+                  {{ e.codMH ? ` · MH ${e.codMH}` : '' }}
+                </option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Punto de Venta</label>
+              <select v-model="puntoVentaId" :disabled="!establecimientoId || !puntosVenta.length">
+                <option value="">Seleccione</option>
+                <option v-for="pv in puntosVenta" :key="pv.id" :value="pv.id">{{ pv.name }}</option>
+              </select>
             </div>
           </div>
         </section>
@@ -245,8 +409,13 @@ onUnmounted(() => {
           </div>
           <div class="tot-letras">Son: {{ totalEnLetras }}</div>
           <div class="tot-actions">
-            <button disabled class="btn-outline" title="Solo diseño">Guardar</button>
-            <button disabled class="btn-primary" title="Solo diseño">Emitir</button>
+            <button :disabled="enviando" class="btn-outline" type="button" @click="emitirFactura">
+              {{ enviando ? 'Enviando...' : 'Guardar' }}
+            </button>
+            <button :disabled="enviando" class="btn-primary" type="button" @click="emitirFactura">
+              {{ enviando ? 'Enviando...' : 'Emitir' }}
+            </button>
+            <small v-if="errorEnvio" class="text-danger">{{ errorEnvio }}</small>
           </div>
         </section>
       </aside>
@@ -267,8 +436,58 @@ onUnmounted(() => {
         <span>Total</span><strong>{{ total.toFixed(2) }}</strong>
       </div>
       <div class="fr-actions">
-        <button disabled class="btn-outline mini" title="Solo diseño">Guardar</button>
-        <button disabled class="btn-primary mini" title="Solo diseño">Emitir</button>
+        <button :disabled="enviando" class="btn-outline mini" type="button" @click="emitirFactura">
+          {{ enviando ? '...' : 'Guardar' }}
+        </button>
+        <button :disabled="enviando" class="btn-primary mini" type="button" @click="emitirFactura">
+          {{ enviando ? '...' : 'Emitir' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal: Crear Cliente Rápido -->
+    <div v-if="mostrarModalCliente" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-card surface-card">
+        <header class="modal-head">
+          <h4>Nuevo Cliente</h4>
+          <button class="icon-btn" type="button" @click="cerrarModalCliente">✕</button>
+        </header>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="field span-2">
+              <label>Nombre</label>
+              <input v-model="clienteForm.nombre" type="text" />
+              <small v-if="clienteErrores.nombre" class="text-danger">{{
+                clienteErrores.nombre
+              }}</small>
+            </div>
+            <div class="field">
+              <label>NIT</label>
+              <input v-model="clienteForm.nit" type="text" />
+              <small v-if="clienteErrores.nit" class="text-danger">{{ clienteErrores.nit }}</small>
+            </div>
+            <div class="field">
+              <label>NRC</label>
+              <input v-model="clienteForm.nrc" type="text" />
+              <small v-if="clienteErrores.nrc" class="text-danger">{{ clienteErrores.nrc }}</small>
+            </div>
+            <div class="field span-2">
+              <label>Giro / Actividad económica</label>
+              <input v-model="clienteForm.descripcionActividad" type="text" />
+            </div>
+            <div class="field span-2">
+              <label>Email</label>
+              <input v-model="clienteForm.email" type="email" />
+              <small v-if="clienteErrores.email" class="text-danger">{{
+                clienteErrores.email
+              }}</small>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn-outline" type="button" @click="cerrarModalCliente">Cancelar</button>
+          <button class="btn-primary" type="button" @click="crearClienteDesdeModal">Guardar</button>
+        </footer>
       </div>
     </div>
   </div>
@@ -563,6 +782,46 @@ onUnmounted(() => {
   background: var(--color-background-mute);
   border: 1px solid var(--color-border);
   cursor: pointer;
+}
+
+.cliente-picker {
+  display: flex;
+  gap: 0.4rem;
+}
+.cliente-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+.modal-card {
+  width: min(720px, 92vw);
+  border-radius: 18px;
+  border: 1px solid var(--color-border);
+  padding: 0.8rem 0.85rem 0.95rem;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-body {
+  margin-top: 0.6rem;
+}
+.modal-foot {
+  margin-top: 0.9rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 @media (max-width: 1080px) {

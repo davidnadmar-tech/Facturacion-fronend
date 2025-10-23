@@ -51,8 +51,14 @@ const router = createRouter({
     {
       path: '/dashboard/productos',
       name: 'dashboard-productos',
-      component: () => import('../views/DashboardProductos.vue'),
+      component: () => import('../views/DashboardInventarioItems.vue'),
       meta: { layout: 'dashboard', title: 'Productos' },
+    },
+    {
+      path: '/dashboard/inventario-items',
+      name: 'dashboard-inventario-items',
+      component: () => import('../views/DashboardInventarioItems.vue'),
+      meta: { layout: 'dashboard', title: 'Inventario Items' },
     },
   ],
 })

@@ -1,36 +1,39 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useClientesStore } from '@/stores/clientes'
+import { useCatalogosStore } from '@/stores/catalogos'
+import { useFormAuxStore } from '@/stores/formAux'
 
 // Store
 const store = useClientesStore()
-store.cargarLocal()
-store.seedDemo()
+const catalogosStore = useCatalogosStore()
+const formAuxStore = useFormAuxStore()
 
 // UI State
 const mostrarForm = ref(false)
 const editCodigo = ref(null) // null = creando
 const filtro = ref('')
-const buscando = ref(false)
+const buscando = computed(() => store.cargando)
+const eliminando = computed(() => store.eliminando)
+const eliminandoId = computed(() => store.eliminandoId)
 const feedback = ref(null) // { tipo:'ok'|'error', msg }
 const errores = reactive({})
-
-// Catálogos mínimos (placeholder) — se pueden externalizar
-const departamentos = ['San Salvador', 'La Libertad', 'Santa Ana', 'San Miguel', 'Sonsonate']
-const municipiosPorDepartamento = {
-  'San Salvador': ['San Salvador', 'Soyapango', 'Ilopango'],
-  'La Libertad': ['Santa Tecla', 'Antiguo Cuscatlán', 'Zaragoza'],
-  'Santa Ana': ['Santa Ana', 'Metapán'],
-  'San Miguel': ['San Miguel', 'Chinameca'],
-  Sonsonate: ['Sonsonate', 'Acajutla'],
-}
-
-// Formulario controlado
+const enviando = ref(false)
+const mostrarModalEliminar = ref(false)
+const clienteAEliminar = ref(null)
+const modalEditarVisible = ref(false)
+const modalEditarContainer = ref(null)
+const editFeedback = ref(null)
+const editProcesando = ref(false)
+const clienteEditando = ref(null)
+let formularioClonado = null
 const form = reactive({
   codigo: '',
+  backendId: '',
   nombre: '',
   telefono: '',
   email: '',
+  actividadId: '',
   codigoActividad: '',
   descripcionActividad: '',
   nrc: '',
@@ -39,12 +42,157 @@ const form = reactive({
   departamento: '',
   municipio: '',
 })
-
-const municipios = computed(() =>
-  form.departamento ? municipiosPorDepartamento[form.departamento] || [] : [],
-)
+const filtroActividad = ref('')
+const actividadesEconomicas = computed(() => {
+  const filtradas = catalogosStore.buscarActividades(filtroActividad.value)
+  const seleccionActual = form.actividadId ? catalogosStore.actividadPorId(form.actividadId) : null
+  if (!seleccionActual) return filtradas
+  const existe = filtradas.some((item) => item.id === seleccionActual.id)
+  return existe ? filtradas : [seleccionActual, ...filtradas]
+})
+const cargandoActividades = computed(() => catalogosStore.actividadesCargando)
+const cargandoDepartamentos = computed(() => catalogosStore.departamentosCargando)
+const departamentosDisponibles = computed(() => {
+  const lista = catalogosStore.departamentosOrdenados || []
+  const actual = form.departamento ? catalogosStore.departamentoPorId(form.departamento) : null
+  if (!actual) return lista
+  const existe = lista.some((item) => item.id === actual.id)
+  return existe ? lista : [actual, ...lista]
+})
+const municipiosDisponibles = computed(() => {
+  if (!form.departamento) return []
+  const lista = catalogosStore.municipiosDeDepartamento(form.departamento) || []
+  const actual = form.municipio ? catalogosStore.municipioPorId(form.municipio) : null
+  if (!actual || actual.deptoId !== form.departamento) return lista
+  const existe = lista.some((item) => item.id === actual.id)
+  return existe ? lista : [actual, ...lista]
+})
+const basePerPageOptions = [10, 20, 30, 50]
+const paginaActual = computed(() => store.paginaActual)
+const totalPaginas = computed(() => store.totalPaginas)
+const totalRegistros = computed(() => store.totalRegistros)
+const porPagina = computed(() => store.porPagina)
+const perPageOptions = computed(() => {
+  const opciones = new Set(basePerPageOptions)
+  const actual = Number(porPagina.value)
+  if (actual) opciones.add(actual)
+  return Array.from(opciones).sort((a, b) => a - b)
+})
+const perPageSeleccionado = ref(String(store.porPagina))
+const puedeRetroceder = computed(() => paginaActual.value > 1)
+const puedeAvanzar = computed(() => paginaActual.value < totalPaginas.value)
 
 const listaFiltrada = computed(() => store.filtrados(filtro.value))
+const registrosPagina = computed(() => listaFiltrada.value.length)
+const rangoInicio = computed(() => {
+  if (!registrosPagina.value) return 0
+  return (paginaActual.value - 1) * porPagina.value + 1
+})
+const rangoFin = computed(() => {
+  if (!registrosPagina.value) return 0
+  return rangoInicio.value + registrosPagina.value - 1
+})
+const mostrarResumen = computed(() => registrosPagina.value > 0)
+
+async function cargarClientesRemoto(
+  busqueda = store.busquedaActual,
+  opciones = {},
+  controles = {},
+) {
+  const params = { ...opciones }
+  const { silencioso = false } = controles
+  if (params.page === undefined) params.page = String(paginaActual.value)
+  if (params.perPage === undefined) params.perPage = String(porPagina.value)
+  const query = typeof busqueda === 'string' ? busqueda : store.busquedaActual
+  const res = await store.cargarClientes(query, params)
+  if (!res.ok) {
+    if (!silencioso) {
+      feedback.value = {
+        tipo: 'error',
+        msg: res.error || 'No se pudieron cargar los clientes',
+      }
+    }
+  } else if (!silencioso && feedback.value && feedback.value.tipo === 'error') {
+    feedback.value = null
+  }
+  if (res.ok && typeof query === 'string') filtro.value = query
+  return res
+}
+
+async function buscarRemoto() {
+  const termino = filtro.value.trim()
+  await cargarClientesRemoto(termino, { page: '1' })
+}
+
+async function irPagina(pagina) {
+  const objetivo = Math.min(Math.max(1, pagina), totalPaginas.value || 1)
+  if (objetivo === paginaActual.value) return null
+  return cargarClientesRemoto(store.busquedaActual, { page: String(objetivo) })
+}
+
+async function paginaAnterior() {
+  if (!puedeRetroceder.value || buscando.value) return
+  return irPagina(paginaActual.value - 1)
+}
+
+async function paginaSiguiente() {
+  if (!puedeAvanzar.value || buscando.value) return
+  return irPagina(paginaActual.value + 1)
+}
+
+async function irPrimerPagina() {
+  if (!puedeRetroceder.value) return
+  return irPagina(1)
+}
+
+async function irUltimaPagina() {
+  if (!puedeAvanzar.value) return
+  return irPagina(totalPaginas.value)
+}
+
+async function cambiarPerPage(valor, previoSeleccionado) {
+  const numero = Number(valor)
+  if (!numero || numero === porPagina.value) return
+  const resultado = await cargarClientesRemoto(store.busquedaActual, {
+    page: '1',
+    perPage: String(numero),
+  })
+  if (!resultado?.ok && previoSeleccionado !== undefined) {
+    perPageSeleccionado.value = previoSeleccionado
+  }
+  return resultado
+}
+
+async function onPerPageChange(event) {
+  const previo = perPageSeleccionado.value
+  const valor = Number(event.target.value)
+  perPageSeleccionado.value = String(valor || porPagina.value)
+  if (!valor) {
+    perPageSeleccionado.value = previo
+    return
+  }
+  await cambiarPerPage(valor, previo)
+}
+
+async function cargarCatalogos() {
+  const [actividadesRes, departamentosRes] = await Promise.all([
+    catalogosStore.cargarActividadesEconomicas(),
+    catalogosStore.cargarDepartamentos({ expand: 'DATA_MUNICS', perPage: '200' }),
+  ])
+  const errores = []
+  if (!actividadesRes.ok) errores.push(actividadesRes.error || 'No se cargaron actividades')
+  if (!departamentosRes.ok) errores.push(departamentosRes.error || 'No se cargaron departamentos')
+  if (errores.length) {
+    feedback.value = { tipo: 'error', msg: errores.join(' | ') }
+  } else if (feedback.value && feedback.value.tipo === 'error') {
+    feedback.value = null
+  }
+}
+
+onMounted(() => {
+  cargarClientesRemoto()
+  cargarCatalogos()
+})
 
 function abrirNuevo() {
   limpiar()
@@ -60,12 +208,21 @@ function scrollTop() {
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
 }
 
+function estaEliminando(cliente) {
+  if (!cliente) return false
+  const candidatos = [cliente.backendId, cliente.codigo].filter(Boolean)
+  if (!candidatos.length) return false
+  return candidatos.some((valor) => valor === eliminandoId.value)
+}
+
 function limpiar() {
   Object.assign(form, {
     codigo: '',
+    backendId: '',
     nombre: '',
     telefono: '',
     email: '',
+    actividadId: '',
     codigoActividad: '',
     descripcionActividad: '',
     nrc: '',
@@ -74,6 +231,7 @@ function limpiar() {
     departamento: '',
     municipio: '',
   })
+  filtroActividad.value = ''
 }
 
 function cancelar() {
@@ -81,49 +239,427 @@ function cancelar() {
   editCodigo.value = null
   feedback.value = null
   Object.keys(errores).forEach((k) => delete errores[k])
+  filtroActividad.value = ''
 }
 
-function editar(c) {
-  limpiar()
-  Object.assign(form, c)
-  editCodigo.value = c.codigo
-  mostrarForm.value = true
-  feedback.value = null
-  Object.keys(errores).forEach((k) => delete errores[k])
-  scrollTop()
+function onDepartamentoChange() {
+  if (!form.departamento) {
+    form.municipio = ''
+    return
+  }
+  const municipioInfo = catalogosStore.municipioPorId(form.municipio)
+  if (!municipioInfo || municipioInfo.deptoId !== form.departamento) {
+    form.municipio = ''
+  }
 }
 
-function enviar() {
+async function enviar() {
   Object.keys(errores).forEach((k) => delete errores[k])
   feedback.value = null
   const payload = { ...form }
-  let resp
-  if (!editCodigo.value) {
-    resp = store.agregar(payload)
-  } else {
-    resp = store.actualizar(editCodigo.value, payload)
+  let resp = { ok: false }
+  enviando.value = true
+  try {
+    if (!editCodigo.value) {
+      resp = await store.crearCliente(payload)
+      if (resp.ok) await cargarClientesRemoto(store.busquedaActual)
+    } else {
+      resp = await store.actualizar(editCodigo.value, payload)
+    }
+  } finally {
+    enviando.value = false
   }
   if (!resp.ok) {
     if (resp.errores) Object.assign(errores, resp.errores)
-    feedback.value = { tipo: 'error', msg: 'Revisa los campos marcados' }
+    feedback.value = {
+      tipo: 'error',
+      msg: resp.error || 'Revisa los campos marcados',
+    }
     return
   }
   feedback.value = { tipo: 'ok', msg: editCodigo.value ? 'Cliente actualizado' : 'Cliente creado' }
-  if (!editCodigo.value) limpiar()
-  if (!editCodigo.value) mostrarForm.value = false
+  if (!editCodigo.value) {
+    limpiar()
+    mostrarForm.value = true
+    scrollTop()
+  }
   editCodigo.value = null
 }
 
-function eliminar(codigo) {
-  if (!confirm('¿Eliminar cliente?')) return
-  const r = store.eliminar(codigo)
-  if (r.ok) feedback.value = { tipo: 'ok', msg: 'Cliente eliminado' }
+function abrirConfirmacion(cliente) {
+  if (!cliente) return
+  clienteAEliminar.value = cliente
+  mostrarModalEliminar.value = true
+}
+
+function cerrarModalEliminar(force = false) {
+  if (eliminando.value && !force) return
+  mostrarModalEliminar.value = false
+  clienteAEliminar.value = null
+}
+
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function confirmarEliminacion() {
+  if (!clienteAEliminar.value || eliminando.value) return
+  const objetivo = clienteAEliminar.value
+  feedback.value = null
+  cerrarModalEliminar(true)
+  const resultado = await store.eliminarCliente(objetivo)
+  if (!resultado.ok) {
+    feedback.value = {
+      tipo: 'error',
+      msg: resultado.error || 'No se pudo eliminar el cliente',
+    }
+    return
+  }
+  const eliminado = resultado.item || objetivo
+  const paginaObjetivo = String(store.paginaActual || 1)
+  const maxIntentos = 3
+  for (let intento = 0; intento < maxIntentos; intento += 1) {
+    const silencioso = intento < maxIntentos - 1
+    const refresco = await cargarClientesRemoto(
+      store.busquedaActual,
+      { page: paginaObjetivo },
+      {
+        silencioso,
+      },
+    )
+    if (!refresco.ok) {
+      feedback.value = {
+        tipo: 'error',
+        msg: refresco.error || 'Cliente eliminado, pero no se pudo actualizar la lista',
+      }
+      return
+    }
+
+    if (!eliminado) break
+    const aunPresente = Array.isArray(refresco.items)
+      ? refresco.items.some((c) => {
+          const backendActual = c.backendId ?? c.id ?? null
+          const backendEliminado = eliminado.backendId ?? eliminado.id ?? null
+          const codigoActual = c.codigo ?? null
+          const codigoEliminado = eliminado.codigo ?? null
+          if (backendActual && backendEliminado) {
+            return String(backendActual) === String(backendEliminado)
+          }
+          if (codigoActual && codigoEliminado) {
+            return String(codigoActual) === String(codigoEliminado)
+          }
+          return false
+        })
+      : false
+
+    if (!aunPresente) break
+
+    if (intento === maxIntentos - 1) {
+      feedback.value = {
+        tipo: 'error',
+        msg: 'El backend aún no refleja la eliminación. Intenta nuevamente en unos segundos.',
+      }
+      return
+    }
+
+    await esperar(300)
+  }
+  feedback.value = { tipo: 'ok', msg: 'Cliente eliminado' }
+  scrollTop()
 }
 
 function blurError(campo) {
   if (errores[campo]) return
   // Validación ligera on-blur si se requiere
 }
+
+async function asegurarCatalogosEdicion() {
+  const tareas = []
+  if (!catalogosStore.actividadesCargadas && !catalogosStore.actividadesCargando)
+    tareas.push(catalogosStore.cargarActividadesEconomicas())
+  if (!catalogosStore.departamentosCargados && !catalogosStore.departamentosCargando)
+    tareas.push(catalogosStore.cargarDepartamentos({ expand: 'DATA_MUNICS', perPage: '200' }))
+  if (tareas.length) await Promise.all(tareas)
+}
+
+function habilitarCampo(elemento) {
+  if (!elemento) return
+  elemento.disabled = false
+  elemento.removeAttribute('disabled')
+}
+
+function limpiarFormularioClonado() {
+  if (formularioClonado) {
+    formularioClonado.removeEventListener('submit', manejarSubmitEdicion)
+  }
+  if (modalEditarContainer.value) modalEditarContainer.value.innerHTML = ''
+  formularioClonado = null
+}
+
+function cerrarModalEditar(force = false) {
+  if (editProcesando.value && !force) return
+  modalEditarVisible.value = false
+  clienteEditando.value = null
+  editFeedback.value = null
+  editProcesando.value = false
+  limpiarFormularioClonado()
+}
+
+function generarOpcionesDepartamento(selectEl, seleccionado) {
+  if (!selectEl) return
+  habilitarCampo(selectEl)
+  selectEl.innerHTML = ''
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  placeholder.textContent = cargandoDepartamentos.value ? 'Cargando…' : 'Seleccionar'
+  selectEl.appendChild(placeholder)
+  if (cargandoDepartamentos.value) return
+  const lista = catalogosStore.departamentosOrdenados || []
+  lista.forEach((item) => {
+    const option = document.createElement('option')
+    option.value = item.id
+    option.textContent = item.name
+    selectEl.appendChild(option)
+  })
+  if (seleccionado) selectEl.value = seleccionado
+}
+
+function generarOpcionesMunicipio(selectEl, deptoId, seleccionado) {
+  if (!selectEl) return
+  habilitarCampo(selectEl)
+  selectEl.innerHTML = ''
+  const optionDefault = document.createElement('option')
+  optionDefault.value = ''
+  optionDefault.textContent = deptoId ? 'Seleccionar' : 'Seleccione un departamento'
+  selectEl.appendChild(optionDefault)
+  if (!deptoId) return
+  const lista = catalogosStore.municipiosDeDepartamento(deptoId) || []
+  lista.forEach((item) => {
+    const option = document.createElement('option')
+    option.value = item.id
+    option.textContent = item.name
+    selectEl.appendChild(option)
+  })
+  if (seleccionado) selectEl.value = seleccionado
+}
+
+function actualizarDatosActividadClon(actividadId) {
+  if (!formularioClonado) return
+  const actividad = catalogosStore.actividadPorId(actividadId)
+  const descripcionInput = formularioClonado.querySelector('[name="descripcionActividad"]')
+  const codigoInput = formularioClonado.querySelector('[name="codigoActividad"]')
+  if (descripcionInput) descripcionInput.value = actividad?.descripcion || actividad?.name || ''
+  if (codigoInput) codigoInput.value = actividad?.codigo || actividad?.codigoSFE || ''
+}
+
+function generarOpcionesActividad(selectEl, seleccionado) {
+  if (!selectEl) return
+  habilitarCampo(selectEl)
+  selectEl.innerHTML = ''
+  const optionDefault = document.createElement('option')
+  optionDefault.value = ''
+  optionDefault.textContent = cargandoActividades.value ? 'Cargando…' : 'Seleccionar'
+  selectEl.appendChild(optionDefault)
+  if (cargandoActividades.value) return
+  const lista = catalogosStore.actividadesOrdenadas || actividadesEconomicas.value || []
+  const usados = new Set()
+  lista.forEach((item) => {
+    if (usados.has(item.id)) return
+    usados.add(item.id)
+    const option = document.createElement('option')
+    const codigo = item.codigoSFE || item.codigo || 'Sin código'
+    const descripcion = item.descripcion || item.name || 'Sin descripción'
+    option.value = item.id
+    option.textContent = `${codigo} · ${descripcion}`
+    selectEl.appendChild(option)
+  })
+  if (seleccionado) selectEl.value = seleccionado
+  actualizarDatosActividadClon(selectEl.value)
+}
+
+function configurarListenersFormularioClonado(datos) {
+  if (!formularioClonado) return
+  const deptoSelect = formularioClonado.querySelector('[name="departamento"]')
+  generarOpcionesDepartamento(deptoSelect, datos.departamento)
+  const municipioSelect = formularioClonado.querySelector('[name="municipio"]')
+  generarOpcionesMunicipio(
+    municipioSelect,
+    deptoSelect?.value || datos.departamento,
+    datos.municipio,
+  )
+  if (deptoSelect) {
+    deptoSelect.addEventListener('change', (event) => {
+      generarOpcionesMunicipio(municipioSelect, event.target.value)
+    })
+  }
+  const actividadSelect = formularioClonado.querySelector('[name="actividadId"]')
+  generarOpcionesActividad(actividadSelect, datos.actividadId)
+  if (actividadSelect) {
+    actividadSelect.addEventListener('change', (event) => {
+      actualizarDatosActividadClon(event.target.value)
+    })
+  }
+}
+
+async function prepararFormularioEdicion(datos) {
+  const respaldo = { ...form }
+  const respaldoFiltroActividad = filtroActividad.value
+  const estabaVisible = mostrarForm.value
+  Object.keys(respaldo).forEach((clave) => {
+    form[clave] = datos[clave] ?? ''
+  })
+  await nextTick()
+  const resultado = formAuxStore.clonarFormulario('cliente-form-base')
+  Object.keys(respaldo).forEach((clave) => {
+    form[clave] = respaldo[clave]
+  })
+  filtroActividad.value = respaldoFiltroActividad
+  mostrarForm.value = estabaVisible
+  if (!resultado.ok) return resultado
+  formularioClonado = resultado.nodo
+  formularioClonado.classList.add('form-clonado')
+  formularioClonado.removeAttribute('id')
+  const acciones = formularioClonado.querySelector('.form-actions')
+  if (acciones) acciones.remove()
+  const feedbackNodo = formularioClonado.querySelector('.feedback')
+  if (feedbackNodo) feedbackNodo.remove()
+  const codigoInput = formularioClonado.querySelector('[name="codigo"]')
+  if (codigoInput) {
+    codigoInput.value = datos.codigo || ''
+    codigoInput.disabled = true
+  }
+  const backendInput = formularioClonado.querySelector('[name="backendId"]')
+  if (backendInput) backendInput.value = datos.backendId || ''
+  habilitarCampo(formularioClonado.querySelector('[name="busquedaActividad"]'))
+  formularioClonado.addEventListener('submit', manejarSubmitEdicion)
+  if (modalEditarContainer.value) {
+    modalEditarContainer.value.innerHTML = ''
+    modalEditarContainer.value.appendChild(formularioClonado)
+  }
+  configurarListenersFormularioClonado(datos)
+  return { ok: true }
+}
+
+async function abrirModalEditar(cliente) {
+  if (!cliente) return
+  editFeedback.value = null
+  editProcesando.value = false
+  await asegurarCatalogosEdicion()
+  const identificador = cliente.backendId || cliente.codigo || cliente.id
+  const detalle = await store.obtenerClientePorId(identificador)
+  if (!detalle.ok) {
+    editFeedback.value = {
+      tipo: 'error',
+      msg: detalle.error || 'No se pudo obtener el cliente',
+    }
+    return
+  }
+  clienteEditando.value = detalle.item
+  modalEditarVisible.value = true
+  await nextTick()
+  const resultado = await prepararFormularioEdicion(detalle.item)
+  if (!resultado.ok) {
+    editFeedback.value = {
+      tipo: 'error',
+      msg: resultado.error || 'No se pudo preparar el formulario de edición',
+    }
+  }
+}
+
+function leerFormularioClonado() {
+  if (!formularioClonado) return {}
+  const datos = new FormData(formularioClonado)
+  const resultado = {}
+  datos.forEach((valor, clave) => {
+    resultado[clave] = typeof valor === 'string' ? valor.trim() : valor
+  })
+  delete resultado.busquedaActividad
+  return resultado
+}
+
+async function manejarSubmitEdicion(event) {
+  event.preventDefault()
+  if (!clienteEditando.value || editProcesando.value) return
+  editProcesando.value = true
+  editFeedback.value = null
+  const datos = leerFormularioClonado()
+  const payload = {
+    ...clienteEditando.value,
+    ...datos,
+    backendId: clienteEditando.value.backendId,
+  }
+  const respuesta = await store.actualizar(clienteEditando.value.codigo, payload)
+  editProcesando.value = false
+  if (!respuesta.ok) {
+    editFeedback.value = {
+      tipo: 'error',
+      msg: respuesta.error || 'No se pudo actualizar el cliente',
+    }
+    return
+  }
+  await cargarClientesRemoto(store.busquedaActual, { page: String(store.paginaActual) })
+  feedback.value = { tipo: 'ok', msg: 'Cliente actualizado' }
+  cerrarModalEditar(true)
+  scrollTop()
+}
+
+function enviarEdicion() {
+  if (formularioClonado) formularioClonado.requestSubmit()
+}
+
+watch(
+  () => store.porPagina,
+  (valor) => {
+    perPageSeleccionado.value = String(valor)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [form.departamento, catalogosStore.departamentosCargados, form.municipio],
+  ([deptoId, cargados, municipioId]) => {
+    if (!cargados) return
+    if (!deptoId) {
+      if (municipioId) form.municipio = ''
+      return
+    }
+    const municipioInfo = catalogosStore.municipioPorId(municipioId)
+    if (!municipioInfo || municipioInfo.deptoId !== deptoId) {
+      form.municipio = ''
+    }
+  },
+)
+
+watch(
+  () => form.actividadId,
+  (nuevo) => {
+    if (!nuevo) {
+      form.descripcionActividad = ''
+      form.codigoActividad = ''
+      return
+    }
+    const actividad = catalogosStore.actividadPorId(nuevo)
+    if (actividad) {
+      form.descripcionActividad = actividad.descripcion || actividad.name || ''
+      form.codigoActividad = actividad.codigo || actividad.codigoSFE || ''
+    } else {
+      form.descripcionActividad = ''
+      form.codigoActividad = ''
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => filtroActividad.value,
+  (valor) => {
+    if (!valor && form.actividadId) {
+      const actividad = catalogosStore.actividadPorId(form.actividadId)
+      if (!actividad) {
+        form.actividadId = ''
+        form.codigoActividad = ''
+      }
+    }
+  },
+)
 </script>
 
 <template>
@@ -141,9 +677,12 @@ function blurError(campo) {
             type="text"
             placeholder="Buscar por nombre o documento"
             :disabled="buscando"
+            @keyup.enter="buscarRemoto"
             aria-label="Filtro clientes"
           />
-          <button class="btn-search" type="button" disabled>Filtrar</button>
+          <button class="btn-search" type="button" @click="buscarRemoto" :disabled="buscando">
+            {{ buscando ? 'Buscando…' : 'Buscar' }}
+          </button>
         </div>
         <button class="btn btn-primary" type="button" @click="abrirNuevo">Nuevo Cliente</button>
       </div>
@@ -159,15 +698,23 @@ function blurError(campo) {
         <h3>{{ editCodigo ? 'Editar Cliente' : 'Nuevo Cliente' }}</h3>
         <small class="text-muted upper">Campos básicos</small>
       </header>
-      <form class="grid-form" @submit.prevent="enviar">
+      <form id="cliente-form-base" class="grid-form" @submit.prevent="enviar">
+        <input type="hidden" name="backendId" v-model="form.backendId" />
         <div class="f-group">
           <label>Código</label>
-          <input type="text" v-model="form.codigo" placeholder="Autogenerado" disabled />
+          <input
+            type="text"
+            name="codigo"
+            v-model="form.codigo"
+            placeholder="Autogenerado"
+            disabled
+          />
         </div>
         <div class="f-group span-2" :class="{ error: errores.nombre }">
           <label>Nombre *</label>
           <input
             type="text"
+            name="nombre"
             v-model.trim="form.nombre"
             @blur="blurError('nombre')"
             placeholder="Nombre completo"
@@ -176,58 +723,150 @@ function blurError(campo) {
         </div>
         <div class="f-group">
           <label>Teléfono</label>
-          <input type="text" v-model.trim="form.telefono" placeholder="Opcional" />
+          <input type="text" name="telefono" v-model.trim="form.telefono" placeholder="Opcional" />
         </div>
         <div class="f-group">
           <label>Email</label>
           <input
             type="email"
+            name="email"
             v-model.trim="form.email"
             placeholder="correo@dominio.com"
             :class="{ invalid: errores.email }"
           />
           <span v-if="errores.email" class="err-msg">{{ errores.email }}</span>
         </div>
-        <div class="f-group">
-          <label>Código Actividad</label>
-          <div class="input-inline">
-            <input type="text" v-model="form.codigoActividad" placeholder="Seleccionar" />
-            <button type="button" class="mini-btn" disabled title="Pendiente modal">Buscar</button>
-          </div>
+        <div class="f-group" :class="{ loading: cargandoActividades }">
+          <label>Actividad económica</label>
+          <input
+            v-model.trim="filtroActividad"
+            type="search"
+            name="busquedaActividad"
+            placeholder="Buscar actividad por código o nombre"
+            :disabled="cargandoActividades || !catalogosStore.actividadesCargadas"
+            class="mini-search"
+          />
+          <select
+            name="actividadId"
+            v-model="form.actividadId"
+            :disabled="
+              cargandoActividades ||
+              (!catalogosStore.actividadesCargadas && !actividadesEconomicas.length)
+            "
+          >
+            <option value="">{{ cargandoActividades ? 'Cargando…' : 'Seleccionar' }}</option>
+            <option
+              v-for="actividad in actividadesEconomicas"
+              :key="actividad.id"
+              :value="actividad.id"
+            >
+              {{
+                (actividad.codigoSFE || actividad.codigo || 'Sin código') +
+                ' · ' +
+                (actividad.descripcion || actividad.name)
+              }}
+            </option>
+          </select>
+          <small v-if="!cargandoActividades && !actividadesEconomicas.length" class="text-muted">
+            {{ filtroActividad ? 'Sin coincidencias' : 'Sin actividades disponibles' }}
+          </small>
         </div>
         <div class="f-group span-2">
           <label>Descripción Actividad / Giro</label>
-          <input type="text" v-model="form.descripcionActividad" placeholder="Autocompletar" />
+          <input
+            type="text"
+            name="descripcionActividad"
+            v-model="form.descripcionActividad"
+            placeholder="Autocompletar"
+            readonly
+          />
         </div>
+        <input type="hidden" name="codigoActividad" :value="form.codigoActividad" />
         <div class="f-group">
           <label>NRC</label>
-          <input type="text" v-model.trim="form.nrc" placeholder="NRC" />
+          <input
+            type="text"
+            name="nrc"
+            v-model.trim="form.nrc"
+            placeholder="NRC"
+            :class="{ invalid: errores.nrc }"
+            @blur="blurError('nrc')"
+          />
+          <span v-if="errores.nrc" class="err-msg">{{ errores.nrc }}</span>
         </div>
         <div class="f-group" :class="{ error: errores.nit }">
           <label>NIT</label>
-          <input type="text" v-model.trim="form.nit" placeholder="NIT" />
+          <input
+            type="text"
+            name="nit"
+            v-model.trim="form.nit"
+            placeholder="NIT"
+            :class="{ invalid: errores.nit }"
+            @blur="blurError('nit')"
+          />
           <span v-if="errores.nit" class="err-msg">{{ errores.nit }}</span>
         </div>
         <div class="f-group">
           <label>DUI</label>
-          <input type="text" v-model.trim="form.dui" placeholder="DUI" />
+          <input
+            type="text"
+            name="dui"
+            v-model.trim="form.dui"
+            placeholder="DUI"
+            :class="{ invalid: errores.dui }"
+            @blur="blurError('dui')"
+          />
+          <span v-if="errores.dui" class="err-msg">{{ errores.dui }}</span>
         </div>
         <div class="f-group">
           <label>Departamento</label>
-          <select v-model="form.departamento">
-            <option value="">Seleccionar</option>
-            <option v-for="d in departamentos" :key="d" :value="d">{{ d }}</option>
+          <select
+            name="departamento"
+            v-model="form.departamento"
+            @change="onDepartamentoChange"
+            :disabled="cargandoDepartamentos || !departamentosDisponibles.length"
+          >
+            <option value="">{{ cargandoDepartamentos ? 'Cargando…' : 'Seleccionar' }}</option>
+            <option v-for="d in departamentosDisponibles" :key="d.id" :value="d.id">
+              {{ d.name }}
+            </option>
           </select>
+          <small
+            v-if="!cargandoDepartamentos && !departamentosDisponibles.length"
+            class="text-muted"
+          >
+            Sin departamentos disponibles
+          </small>
         </div>
         <div class="f-group">
           <label>Municipio</label>
-          <select v-model="form.municipio" :disabled="!municipios.length">
-            <option value="">Seleccionar</option>
-            <option v-for="m in municipios" :key="m" :value="m">{{ m }}</option>
+          <select
+            name="municipio"
+            v-model="form.municipio"
+            :disabled="!form.departamento || !municipiosDisponibles.length"
+          >
+            <option value="">
+              {{
+                form.departamento
+                  ? cargandoDepartamentos
+                    ? 'Cargando municipios…'
+                    : 'Seleccionar'
+                  : 'Seleccione un departamento'
+              }}
+            </option>
+            <option v-for="m in municipiosDisponibles" :key="m.id" :value="m.id">
+              {{ m.name }}
+            </option>
           </select>
+          <small
+            v-if="form.departamento && !cargandoDepartamentos && !municipiosDisponibles.length"
+            class="text-muted"
+          >
+            Sin municipios asociados
+          </small>
         </div>
         <div class="form-actions span-3">
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary" :disabled="enviando">
             {{ editCodigo ? 'Actualizar' : 'Guardar' }}
           </button>
           <button type="button" class="btn" @click="cancelar">Cancelar</button>
@@ -235,11 +874,10 @@ function blurError(campo) {
         <div v-if="feedback" class="feedback" :class="feedback.tipo">{{ feedback.msg }}</div>
       </form>
     </section>
-
     <!-- Tabla -->
     <section class="table-wrapper surface-card elev-2" aria-label="Listado clientes">
       <header class="table-head">
-        <h3>Lista de Clientes ({{ store.total }})</h3>
+        <h3>Lista de Clientes ({{ totalRegistros }})</h3>
         <small class="text-muted" v-if="filtro">Filtro activo</small>
       </header>
       <div class="table-scroll">
@@ -256,9 +894,6 @@ function blurError(campo) {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="!listaFiltrada.length">
-              <td colspan="7" class="empty">No hay clientes</td>
-            </tr>
             <tr v-for="c in listaFiltrada" :key="c.codigo">
               <td>{{ c.nombre }}</td>
               <td>{{ c.nrc }}</td>
@@ -267,41 +902,196 @@ function blurError(campo) {
               <td>{{ c.email }}</td>
               <td class="actividad">{{ c.descripcionActividad }}</td>
               <td class="center acciones-col">
-                <button class="table-btn" type="button" @click="editar(c)">Editar</button>
-                <button class="table-btn danger" type="button" @click="eliminar(c.codigo)">
-                  Borrar
+                <button
+                  class="table-btn"
+                  type="button"
+                  :disabled="buscando"
+                  @click="abrirModalEditar(c)"
+                >
+                  Editar
+                </button>
+                <button
+                  class="table-btn danger"
+                  type="button"
+                  :disabled="buscando || eliminando || estaEliminando(c)"
+                  @click="abrirConfirmacion(c)"
+                >
+                  {{ estaEliminando(c) ? 'Eliminando…' : 'Borrar' }}
                 </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+      <div class="table-foot">
+        <div class="summary">
+          <span v-if="mostrarResumen">
+            Mostrando {{ rangoInicio }} - {{ rangoFin }} de {{ totalRegistros }}
+          </span>
+          <span v-else>Sin resultados</span>
+        </div>
+        <div class="pager">
+          <button
+            class="pager-btn"
+            type="button"
+            @click="irPrimerPagina"
+            :disabled="buscando || !puedeRetroceder"
+            aria-label="Primera página"
+          >
+            &lt;&lt;
+          </button>
+          <button
+            class="pager-btn"
+            type="button"
+            @click="paginaAnterior"
+            :disabled="buscando || !puedeRetroceder"
+            aria-label="Página anterior"
+          >
+            &lt;
+          </button>
+          <span class="page-indicator">Página {{ paginaActual }} de {{ totalPaginas }}</span>
+          <button
+            class="pager-btn"
+            type="button"
+            @click="paginaSiguiente"
+            :disabled="buscando || !puedeAvanzar"
+            aria-label="Página siguiente"
+          >
+            &gt;
+          </button>
+          <button
+            class="pager-btn"
+            type="button"
+            @click="irUltimaPagina"
+            :disabled="buscando || !puedeAvanzar"
+            aria-label="Última página"
+          >
+            &gt;&gt;
+          </button>
+        </div>
+        <div class="per-page-control">
+          <label class="per-page-label" for="per-page-select">Por página</label>
+          <select
+            id="per-page-select"
+            :value="perPageSeleccionado"
+            @change="onPerPageChange"
+            :disabled="buscando"
+          >
+            <option v-for="opcion in perPageOptions" :key="opcion" :value="opcion">
+              {{ opcion }}
+            </option>
+          </select>
+        </div>
+      </div>
     </section>
 
-    <!-- Modal placeholder (sin funcionalidad) -->
-    <dialog class="modal-actividad" open hidden>
-      <div class="modal-surface surface-card elev-3">
-        <header class="modal-head">
-          <h4>Buscar Actividad Económica</h4>
-          <button class="close-btn" disabled>&times;</button>
+    <div
+      v-if="mostrarModalEliminar"
+      class="confirm-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-modal-title"
+      @click.self="cerrarModalEliminar"
+    >
+      <div class="confirm-modal surface-card elev-3">
+        <header class="confirm-modal-head">
+          <div>
+            <h4 id="confirm-modal-title">Eliminar cliente</h4>
+            <p class="confirm-subtitle text-muted">Esta acción no se puede deshacer.</p>
+          </div>
+          <button
+            type="button"
+            class="confirm-close"
+            :disabled="eliminando"
+            aria-label="Cerrar"
+            @click="cerrarModalEliminar"
+          >
+            ×
+          </button>
         </header>
-        <div class="modal-body">
-          <div class="search-row">
-            <input type="text" placeholder="Buscar..." disabled />
-            <button class="mini-btn" disabled>Buscar</button>
-          </div>
-          <div class="placeholder-table">
-            <div class="ph-row" v-for="n in 6" :key="n">
-              <span class="ph-block w-20"></span>
-              <span class="ph-block w-60"></span>
-            </div>
-          </div>
+        <div class="confirm-modal-body">
+          <p class="confirm-message">
+            ¿Seguro que deseas eliminar al cliente
+            <strong>{{ (clienteAEliminar && clienteAEliminar.nombre) || 'Sin nombre' }}</strong
+            >?
+          </p>
+          <ul v-if="clienteAEliminar" class="confirm-list">
+            <li>
+              <span class="label">Nombre</span>
+              <span class="value">{{ clienteAEliminar.nombre || 'Sin nombre' }}</span>
+            </li>
+            <li>
+              <span class="label">DUI</span>
+              <span class="value">{{ clienteAEliminar.dui || 'Sin DUI' }}</span>
+            </li>
+            <li>
+              <span class="label">Email</span>
+              <span class="value">{{ clienteAEliminar.email || 'Sin correo' }}</span>
+            </li>
+          </ul>
         </div>
-        <footer class="modal-foot">
-          <button class="btn-outline" disabled>Cerrar</button>
+        <footer class="confirm-modal-foot">
+          <button type="button" class="btn" @click="cerrarModalEliminar" :disabled="eliminando">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="eliminando"
+            @click="confirmarEliminacion"
+          >
+            {{ eliminando ? 'Eliminando…' : 'Eliminar' }}
+          </button>
         </footer>
       </div>
-    </dialog>
+    </div>
+    <div
+      v-if="modalEditarVisible"
+      class="edit-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-modal-title"
+      @click.self="cerrarModalEditar"
+    >
+      <div class="edit-modal surface-card elev-3">
+        <header class="edit-modal-head">
+          <div>
+            <h4 id="edit-modal-title">Editar cliente</h4>
+            <p class="confirm-subtitle text-muted">
+              Actualiza los datos necesarios y guarda los cambios.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="confirm-close"
+            :disabled="editProcesando"
+            aria-label="Cerrar"
+            @click="cerrarModalEditar"
+          >
+            ×
+          </button>
+        </header>
+        <div class="edit-modal-body">
+          <div ref="modalEditarContainer" class="edit-form-container"></div>
+          <p v-if="editFeedback" class="modal-feedback" :class="editFeedback.tipo">
+            {{ editFeedback.msg }}
+          </p>
+        </div>
+        <footer class="edit-modal-foot">
+          <button type="button" class="btn" @click="cerrarModalEditar" :disabled="editProcesando">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="editProcesando"
+            @click="enviarEdicion"
+          >
+            {{ editProcesando ? 'Actualizando…' : 'Guardar cambios' }}
+          </button>
+        </footer>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -418,6 +1208,11 @@ function blurError(campo) {
   border-radius: var(--radius-md);
   font-size: 0.8rem;
 }
+.f-group .mini-search {
+  margin-top: var(--space-2);
+  padding: 0.55rem 0.75rem;
+  font-size: var(--fz-sm);
+}
 .f-group input:focus,
 .f-group select:focus {
   outline: 2px solid rgba(var(--brand-primary-rgb) / 0.3);
@@ -486,6 +1281,77 @@ function blurError(campo) {
   border-collapse: collapse;
   font-size: 0.75rem;
   min-width: 880px;
+}
+.table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: 0.75rem;
+}
+.table-foot .summary {
+  min-width: 200px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.pager-btn {
+  min-width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base);
+}
+.pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pager-btn:not(:disabled):hover {
+  background: var(--color-background-mute);
+}
+.page-indicator {
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
+.per-page-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.per-page-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.per-page-control select {
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+}
+.per-page-control select:focus {
+  outline: 2px solid rgba(var(--brand-primary-rgb) / 0.3);
 }
 .table-scroll thead th {
   text-align: left;
@@ -593,81 +1459,134 @@ function blurError(campo) {
   color: #b42318;
 }
 
-/* Modal placeholder */
-.modal-actividad[open] {
-  display: none;
+/* Confirmación eliminación y edición */
+.confirm-modal-backdrop,
+.edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17 24 39 / 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  z-index: 50;
 }
-.modal-surface {
-  max-width: 720px;
-  margin: 2rem auto;
-  padding: var(--space-6) var(--space-5) var(--space-5);
+.confirm-modal,
+.edit-modal {
+  width: min(460px, 100%);
   border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
-.modal-head {
+.confirm-modal-head,
+.edit-modal-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--space-3);
 }
-.modal-head h4 {
-  font-size: 0.9rem;
+.confirm-modal-head h4,
+.edit-modal-head h4 {
+  font-size: 0.95rem;
   font-weight: 600;
 }
-.close-btn {
+.confirm-subtitle {
+  margin-top: var(--space-1);
+  font-size: 0.7rem;
+  letter-spacing: 0.3px;
+}
+.confirm-close {
   background: transparent;
   border: 0;
   font-size: 1.4rem;
   line-height: 1;
+  cursor: pointer;
+  color: rgba(17 24 39 / 0.65);
+}
+.confirm-close:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
-.search-row {
-  display: flex;
-  gap: 0.6rem;
-}
-.search-row input {
-  flex: 1;
-  border: 1px solid var(--color-border);
-  background: var(--color-background-soft);
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--radius-md);
-}
-.placeholder-table {
+.confirm-modal-body,
+.edit-modal-body {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: var(--space-4);
 }
-.ph-row {
+.confirm-message {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.confirm-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: flex;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 0.75rem;
 }
-.ph-block {
-  height: 12px;
-  border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--color-background-mute),
-    var(--color-background-soft),
-    var(--color-background-mute)
-  );
-  background-size: 200% 100%;
-  animation: shimmer 2.2s ease-in-out infinite;
+.confirm-list .label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(17 24 39 / 0.65);
 }
-.w-20 {
-  width: 20%;
+.confirm-list .value {
+  margin-left: var(--space-1);
 }
-.w-60 {
-  width: 60%;
+.confirm-modal-foot,
+.edit-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.modal-feedback {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-md);
+}
+.modal-feedback.error {
+  background: linear-gradient(90deg, #fee4e2, #fecdca);
+  color: #b42318;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
+.edit-form-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-clonado {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.form-clonado .f-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.form-clonado .f-group label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.form-clonado input,
+.form-clonado select {
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
 }
 
 /* Dark mode adjustments */
@@ -682,9 +1601,6 @@ function blurError(campo) {
 @media (prefers-reduced-motion: reduce) {
   .table-scroll tbody tr {
     transition: none !important;
-  }
-  .ph-block {
-    animation: none !important;
   }
 }
 </style>
