@@ -680,7 +680,7 @@ watch(
             @keyup.enter="buscarRemoto"
             aria-label="Filtro clientes"
           />
-          <button class="btn-search" type="button" @click="buscarRemoto" :disabled="buscando">
+          <button class="btn btn-search" type="button" @click="buscarRemoto" :disabled="buscando">
             {{ buscando ? 'Buscando…' : 'Buscar' }}
           </button>
         </div>
@@ -881,7 +881,7 @@ watch(
         <small class="text-muted" v-if="filtro">Filtro activo</small>
       </header>
       <div class="table-scroll">
-        <table>
+        <table class="table-modern">
           <thead>
             <tr>
               <th>Nombre</th>
@@ -903,7 +903,7 @@ watch(
               <td class="actividad">{{ c.descripcionActividad }}</td>
               <td class="center acciones-col">
                 <button
-                  class="table-btn"
+                  class="btn btn-xs btn-outline"
                   type="button"
                   :disabled="buscando"
                   @click="abrirModalEditar(c)"
@@ -911,7 +911,7 @@ watch(
                   Editar
                 </button>
                 <button
-                  class="table-btn danger"
+                  class="btn btn-xs btn-danger"
                   type="button"
                   :disabled="buscando || eliminando || estaEliminando(c)"
                   @click="abrirConfirmacion(c)"
@@ -987,97 +987,129 @@ watch(
 
     <div
       v-if="mostrarModalEliminar"
-      class="confirm-modal-backdrop"
+      class="modal-backdrop-modern"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-modal-title"
       @click.self="cerrarModalEliminar"
     >
-      <div class="confirm-modal surface-card elev-3">
-        <header class="confirm-modal-head">
-          <div>
-            <h4 id="confirm-modal-title">Eliminar cliente</h4>
-            <p class="confirm-subtitle text-muted">Esta acción no se puede deshacer.</p>
+      <div class="modal-modern-confirm surface-card elev-3">
+        <header class="modal-header-modern">
+          <div class="modal-title-section">
+            <h4 id="confirm-modal-title" class="modal-title">Eliminar Cliente</h4>
+            <p class="modal-subtitle">Esta acción no se puede deshacer.</p>
           </div>
           <button
             type="button"
-            class="confirm-close"
+            class="btn btn-xs btn-outline"
             :disabled="eliminando"
             aria-label="Cerrar"
             @click="cerrarModalEliminar"
           >
-            ×
+            ✕
           </button>
         </header>
-        <div class="confirm-modal-body">
-          <p class="confirm-message">
-            ¿Seguro que deseas eliminar al cliente
-            <strong>{{ (clienteAEliminar && clienteAEliminar.nombre) || 'Sin nombre' }}</strong
-            >?
-          </p>
-          <ul v-if="clienteAEliminar" class="confirm-list">
-            <li>
-              <span class="label">Nombre</span>
-              <span class="value">{{ clienteAEliminar.nombre || 'Sin nombre' }}</span>
-            </li>
-            <li>
-              <span class="label">DUI</span>
-              <span class="value">{{ clienteAEliminar.dui || 'Sin DUI' }}</span>
-            </li>
-            <li>
-              <span class="label">Email</span>
-              <span class="value">{{ clienteAEliminar.email || 'Sin correo' }}</span>
-            </li>
-          </ul>
+        <div class="modal-content">
+          <div class="confirm-message-modern">
+            <div class="confirm-icon">🗑️</div>
+            <div class="confirm-text">
+              <p>
+                ¿Seguro que deseas eliminar al cliente
+                <strong>{{ (clienteAEliminar && clienteAEliminar.nombre) || 'Sin nombre' }}</strong
+                >?
+              </p>
+            </div>
+          </div>
+
+          <div v-if="clienteAEliminar" class="client-details-card">
+            <div class="detail-row">
+              <span class="detail-label">Nombre</span>
+              <span class="detail-value">{{ clienteAEliminar.nombre || 'Sin nombre' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">DUI</span>
+              <span class="detail-value">{{ clienteAEliminar.dui || 'Sin DUI' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Email</span>
+              <span class="detail-value">{{ clienteAEliminar.email || 'Sin correo' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Código</span>
+              <span class="detail-value">{{ clienteAEliminar.codigo || 'Sin código' }}</span>
+            </div>
+          </div>
         </div>
-        <footer class="confirm-modal-foot">
+        <footer class="modal-footer-modern">
           <button type="button" class="btn" @click="cerrarModalEliminar" :disabled="eliminando">
             Cancelar
           </button>
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn btn-danger"
             :disabled="eliminando"
             @click="confirmarEliminacion"
           >
-            {{ eliminando ? 'Eliminando…' : 'Eliminar' }}
+            {{ eliminando ? 'Eliminando…' : 'Eliminar Cliente' }}
           </button>
         </footer>
       </div>
     </div>
     <div
       v-if="modalEditarVisible"
-      class="edit-modal-backdrop"
+      class="modal-backdrop-modern"
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-modal-title"
       @click.self="cerrarModalEditar"
     >
-      <div class="edit-modal surface-card elev-3">
-        <header class="edit-modal-head">
-          <div>
-            <h4 id="edit-modal-title">Editar cliente</h4>
-            <p class="confirm-subtitle text-muted">
-              Actualiza los datos necesarios y guarda los cambios.
-            </p>
+      <div class="modal-modern-edit surface-card elev-3">
+        <header class="modal-header-modern">
+          <div class="modal-title-section">
+            <h4 id="edit-modal-title" class="modal-title">Editar Cliente</h4>
+            <p class="modal-subtitle">Actualiza los datos necesarios y guarda los cambios.</p>
           </div>
           <button
             type="button"
-            class="confirm-close"
+            class="btn btn-xs btn-outline"
             :disabled="editProcesando"
             aria-label="Cerrar"
             @click="cerrarModalEditar"
           >
-            ×
+            ✕
           </button>
         </header>
-        <div class="edit-modal-body">
-          <div ref="modalEditarContainer" class="edit-form-container"></div>
-          <p v-if="editFeedback" class="modal-feedback" :class="editFeedback.tipo">
-            {{ editFeedback.msg }}
-          </p>
+        <div class="modal-content">
+          <!-- Stats del cliente -->
+          <div class="modal-stats">
+            <div class="stat-item">
+              <div class="stat-label">Código</div>
+              <div class="stat-value">{{ clienteEditando?.codigo || 'N/A' }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Estado</div>
+              <div class="stat-value">
+                {{ clienteEditando?.activo !== false ? 'Activo' : 'Inactivo' }}
+              </div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Actividad</div>
+              <div class="stat-value">{{ clienteEditando?.codigoActividad || 'Sin asignar' }}</div>
+            </div>
+          </div>
+
+          <!-- Formulario -->
+          <div class="form-container-modern">
+            <div ref="modalEditarContainer" class="edit-form-container"></div>
+          </div>
+
+          <!-- Feedback -->
+          <div v-if="editFeedback" class="alert-modern" :class="editFeedback.tipo">
+            <span class="alert-icon">{{ editFeedback.tipo === 'error' ? '⚠️' : '✅' }}</span>
+            <span class="alert-message">{{ editFeedback.msg }}</span>
+          </div>
         </div>
-        <footer class="edit-modal-foot">
+        <footer class="modal-footer-modern">
           <button type="button" class="btn" @click="cerrarModalEditar" :disabled="editProcesando">
             Cancelar
           </button>
@@ -1459,100 +1491,143 @@ watch(
   color: #b42318;
 }
 
-/* Confirmación eliminación y edición */
-.confirm-modal-backdrop,
-.edit-modal-backdrop {
+/* Modales Modernos */
+.modal-backdrop-modern {
   position: fixed;
   inset: 0;
-  background: rgba(17 24 39 / 0.45);
-  backdrop-filter: blur(4px);
+  background: rgba(17 24 39 / 0.65);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-6);
-  z-index: 50;
+  padding: var(--space-4);
+  z-index: 60;
+  animation: fadeInBackdrop 0.3s ease-out;
 }
-.confirm-modal,
-.edit-modal {
-  width: min(460px, 100%);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6) var(--space-5);
+
+@keyframes fadeInBackdrop {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+.modal-modern-edit {
+  width: min(900px, 95vw);
+  max-height: 90vh;
+  border-radius: var(--radius-2xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: slideInModal 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  background: var(--color-background);
+}
+
+.modal-modern-confirm {
+  width: min(520px, 95vw);
+  border-radius: var(--radius-2xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: slideInModal 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  background: var(--color-background);
+}
+
+@keyframes slideInModal {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header-modern {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+}
+
+.modal-title-section {
+  flex: 1;
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-2) 0;
+  letter-spacing: 0.3px;
+}
+
+.modal-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  opacity: 0.7;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.modal-content {
+  flex: 1;
+  padding: var(--space-6);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
-.confirm-modal-head,
-.edit-modal-head {
+
+.modal-stats {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.confirm-modal-head h4,
-.edit-modal-head h4 {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-.confirm-subtitle {
-  margin-top: var(--space-1);
-  font-size: 0.7rem;
-  letter-spacing: 0.3px;
-}
-.confirm-close {
-  background: transparent;
-  border: 0;
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-  color: rgba(17 24 39 / 0.65);
-}
-.confirm-close:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.confirm-modal-body,
-.edit-modal-body {
-  display: flex;
-  flex-direction: column;
   gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-background-soft);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
 }
-.confirm-message {
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-.confirm-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+
+.stat-item {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  font-size: 0.75rem;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
 }
-.confirm-list .label {
+
+.stat-label {
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(17 24 39 / 0.65);
+  color: var(--color-text);
+  opacity: 0.7;
 }
-.confirm-list .value {
-  margin-left: var(--space-1);
-}
-.confirm-modal-foot,
-.edit-modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-}
-.modal-feedback {
-  font-size: 0.7rem;
+
+.stat-value {
+  font-size: 0.9rem;
   font-weight: 600;
-  padding: 0.6rem 0.75rem;
-  border-radius: var(--radius-md);
+  color: var(--brand-primary);
 }
-.modal-feedback.error {
-  background: linear-gradient(90deg, #fee4e2, #fecdca);
-  color: #b42318;
+
+.form-container-modern {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
 }
 
 .edit-form-container {
@@ -1578,6 +1653,8 @@ watch(
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
+  color: var(--color-text);
+  opacity: 0.8;
 }
 
 .form-clonado input,
@@ -1587,6 +1664,170 @@ watch(
   padding: 0.75rem 0.85rem;
   border-radius: var(--radius-md);
   font-size: 0.8rem;
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.form-clonado input:focus,
+.form-clonado select:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb) / 0.15);
+  background: var(--color-background);
+}
+
+.alert-modern {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.alert-modern.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.alert-modern.ok {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.alert-icon {
+  font-size: 0.9rem;
+}
+
+.alert-message {
+  flex: 1;
+}
+
+.modal-footer-modern {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-background-soft);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Modal de Confirmación */
+.confirm-message-modern {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-background-soft);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.confirm-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.confirm-text {
+  flex: 1;
+}
+
+.confirm-text p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.confirm-text strong {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+.client-details-card {
+  background: var(--color-background-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.detail-value {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-heading);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal-modern-edit,
+  .modal-modern-confirm {
+    width: 95vw;
+    max-height: 95vh;
+  }
+
+  .modal-header-modern,
+  .modal-content,
+  .modal-footer-modern {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .modal-stats {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .stat-item {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .form-clonado {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-backdrop-modern {
+    padding: var(--space-2);
+  }
+
+  .modal-modern-edit,
+  .modal-modern-confirm {
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+  }
 }
 
 /* Dark mode adjustments */

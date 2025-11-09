@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
-import api from '@/api/axiosConection'
-
-const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
+import api, { API_GATEWAY_URL, isSuccessResponse } from '@/api/axiosConection'
 
 function parseContenido(contenido) {
   if (!contenido) return null
@@ -280,7 +278,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener las actividades económicas'
           this.errorActividades = msg
           return { ok: false, error: msg }
@@ -327,7 +325,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener los tipos de items'
           this.errorTiposItems = msg
           return { ok: false, error: msg }
@@ -379,7 +377,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener los departamentos'
           this.errorDepartamentos = msg
           return { ok: false, error: msg }
@@ -427,7 +425,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener las formas de pago'
           this.errorFormasPago = msg
           return { ok: false, error: msg }
@@ -477,7 +475,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener los establecimientos'
           this.errorEstablecimientos = msg
           return { ok: false, error: msg }
@@ -521,7 +519,7 @@ export const useCatalogosStore = defineStore('catalogos', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener los tipos de factura'
           this.errorTiposFactura = msg
           return { ok: false, error: msg }

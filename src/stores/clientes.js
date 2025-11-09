@@ -103,10 +103,8 @@ export const useClientesStore = defineStore('clientes', {
 */
 
 import { defineStore } from 'pinia'
-import api from '@/api/axiosConection'
+import api, { API_GATEWAY_URL, isSuccessResponse } from '@/api/axiosConection'
 import { useFormAuxStore } from './formAux'
-
-const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
 const CODIGO_CLIENTE_REGEX_KEY = 'codigoCliente'
 const CODIGO_CLIENTE_CHARSET = 'C0123456789'
 const CODIGO_CLIENTE_LONGITUD = 5
@@ -283,7 +281,7 @@ export const useClientesStore = defineStore('clientes', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudieron obtener los clientes'
           this.error = msg
           return { ok: false, error: msg }
@@ -363,7 +361,7 @@ export const useClientesStore = defineStore('clientes', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo guardar el cliente'
           this.error = msg
           return { ok: false, error: msg }
@@ -418,7 +416,7 @@ export const useClientesStore = defineStore('clientes', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo actualizar el cliente'
           this.error = msg
           return { ok: false, error: msg }
@@ -466,7 +464,7 @@ export const useClientesStore = defineStore('clientes', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se encontró el cliente solicitado'
           return { ok: false, error: msg }
         }
@@ -538,7 +536,7 @@ export const useClientesStore = defineStore('clientes', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo eliminar el cliente'
           this.error = msg
           return { ok: false, error: msg }

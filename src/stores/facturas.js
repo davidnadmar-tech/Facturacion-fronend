@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
-import api from '@/api/axiosConection'
-
-const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
+import api, { API_GATEWAY_URL, isSuccessResponse } from '@/api/axiosConection'
 
 /*
  Estructura de factura (simplificada - solo para UI local):
@@ -171,7 +169,7 @@ export const useFacturasStore = defineStore('facturas', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo guardar la factura'
           this.error = msg
           return { ok: false, error: msg }

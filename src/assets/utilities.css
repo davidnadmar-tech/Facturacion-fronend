@@ -166,7 +166,7 @@
   border-radius: var(--radius-2xl);
 }
 
-/* Buttons básicos (solo para prototipado rápido) */
+/* Sistema de Botones Unificado */
 .btn {
   font-family: inherit;
   font-weight: 600;
@@ -176,25 +176,107 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background: var(--color-background-soft);
+  color: var(--color-text);
   cursor: pointer;
   transition:
     background var(--transition-base),
     color var(--transition-base),
-    border-color var(--transition-base);
+    border-color var(--transition-base),
+    transform var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-decoration: none;
 }
 .btn:hover {
   background: var(--color-background-mute);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Variantes de botones */
 .btn-primary {
   background: var(--grad-primary);
   color: #fff;
   border-color: var(--brand-primary);
 }
 .btn-primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
+  box-shadow: var(--shadow-md);
 }
+
 .btn-outline {
   background: var(--color-background);
+  border-color: var(--color-border-hover);
+}
+.btn-outline:hover {
+  background: var(--color-background-soft);
+  border-color: var(--brand-primary);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  color: #fff;
+  border-color: #c53030;
+}
+.btn-danger:hover {
+  filter: brightness(1.05);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-success {
+  background: var(--grad-primary);
+  color: #fff;
+  border-color: var(--brand-primary);
+}
+.btn-success:hover {
+  filter: brightness(1.05);
+}
+
+/* Tamaños de botones */
+.btn-sm {
+  font-size: var(--fz-xs);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+}
+
+.btn-xs {
+  font-size: var(--fz-xs);
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.4px;
+}
+
+.btn-lg {
+  font-size: var(--fz-base);
+  padding: 0.9rem 1.5rem;
+  border-radius: var(--radius-lg);
+}
+
+/* Botones especializados */
+.btn-icon {
+  padding: 0.5rem;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--radius-sm);
+}
+
+.btn-search,
+.btn-filter {
+  background: var(--grad-primary);
+  color: #fff;
+  border-color: var(--brand-primary);
+  font-size: var(--fz-xs);
+  padding: 0.6rem 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
 }
 
 /* Utilities color states */
@@ -206,6 +288,168 @@
 }
 .text-danger {
   color: #c93d3d;
+}
+
+/* Sistema de Listas y Tablas Mejoradas */
+.list-container {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.list-item {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.list-item:last-child {
+  border-bottom: none;
+}
+.list-item:hover {
+  background: var(--color-background-soft);
+}
+
+.list-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.list-item-title {
+  font-weight: 600;
+  font-size: var(--fz-base);
+  color: var(--color-heading);
+}
+
+.list-item-subtitle {
+  font-size: var(--fz-sm);
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.list-item-meta {
+  font-size: var(--fz-xs);
+  color: var(--color-text);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.list-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Tabla moderna */
+.table-modern {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-background);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.table-modern thead th {
+  background: var(--color-background-soft);
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--fz-sm);
+  color: var(--color-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table-modern tbody td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--fz-sm);
+  transition: background var(--transition-base);
+}
+
+.table-modern tbody tr:hover td {
+  background: var(--color-background-soft);
+}
+
+.table-modern tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Badges y estados */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--fz-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-success {
+  background: rgba(var(--brand-primary-rgb) / 0.15);
+  color: var(--brand-primary);
+}
+
+.badge-warning {
+  background: rgba(255, 165, 0, 0.15);
+  color: #ff8c00;
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.badge-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+/* Estados de carga y vacío */
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--color-text);
+  opacity: 0.6;
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.4;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 2px solid var(--color-border);
+  border-top: 2px solid var(--brand-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Animations helpers */
@@ -233,6 +477,19 @@
   .btn-outline {
     background: var(--color-background-soft);
   }
+
+  /* Asegurar visibilidad de inputs en dark mode */
+  input,
+  textarea,
+  select {
+    color: var(--color-text) !important;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text) !important;
+    opacity: 0.6 !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -241,5 +498,8 @@
   }
   .btn {
     transition: none !important;
+  }
+  .loading-spinner {
+    animation: none !important;
   }
 }

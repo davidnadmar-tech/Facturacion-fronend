@@ -16,10 +16,18 @@ const perPageSeleccionado = ref(String(inventarioStore.porPagina || 25))
 const mostrarForm = ref(false)
 const editId = ref(null)
 
+// Variables para modal de edición
+const modalEditarVisible = ref(false)
+const editFeedback = ref(null)
+const editProcesando = ref(false)
+const itemEditando = ref(null)
+
 const selectedId = ref(null)
 const modalContexto = ref(null)
 const modalAbierto = ref(false)
 const detalleEditable = ref([])
+const detalleEdicion = ref([])
+const detalleEdicionFeedback = ref(null)
 const modalFeedback = ref(null)
 const enviando = ref(false)
 const errorDetalle = ref(null)
@@ -114,6 +122,18 @@ const detalleNuevoResumen = computed(() =>
   Array.isArray(nuevoItem.DATA_OBJETO?.DETALLE) ? nuevoItem.DATA_OBJETO.DETALLE.length : 0,
 )
 
+const detalleEdicionStats = computed(() => {
+  const lista = detalleEdicion.value
+  const total = lista.length
+  const monto = lista.reduce((acc, detalle) => {
+    const montoDetalle = Number.parseFloat(detalle.MONTO || 0) || 0
+    const cantidad = Number.parseInt(detalle.CANTIDAD, 10) || 0
+    return acc + montoDetalle * cantidad
+  }, 0)
+  const activos = lista.filter((detalle) => Boolean(detalle.ACTIVO)).length
+  return { total, monto, activos }
+})
+
 const feedbackCreacion = ref(null)
 const erroresCreacion = reactive({})
 
@@ -125,15 +145,93 @@ const totalMonto = computed(() =>
   }, 0),
 )
 
-function formatearFecha(fecha) {
-  if (!fecha) return 'Sin registro'
-  const valor = new Date(fecha)
-  if (Number.isNaN(valor.getTime())) return 'Sin registro'
-  return new Intl.DateTimeFormat('es-SV', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(valor)
+function generarUidDetalle(prefijo = 'detalle') {
+  return `${prefijo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
+
+function construirFilaDetalleBase(overrides = {}) {
+  return {
+    _uid: overrides._uid || generarUidDetalle('detalle'),
+    TEXTO: '',
+    MONTO: 0,
+    CANTIDAD: 1,
+    HORA: '00:00:00',
+    GRACIA: '00:00:00',
+    ACTIVO: true,
+    ...overrides,
+  }
+}
+
+function transformarValorActivo(valor, fallback = true) {
+  if (typeof valor === 'boolean') return valor
+  if (typeof valor === 'number') return valor !== 0
+  if (typeof valor === 'string') {
+    const normalizado = valor.trim().toLowerCase()
+    if (!normalizado) return fallback
+    if (['0', 'false', 'inactivo', 'no'].includes(normalizado)) return false
+    if (['1', 'true', 'activo', 'sí', 'si', 'yes'].includes(normalizado)) return true
+  }
+  if (valor == null) return fallback
+  return Boolean(valor)
+}
+
+function mapearDetalleEditable(detalles = []) {
+  return detalles.map((detalle) => {
+    const cantidad = Number.parseInt(detalle?.CANTIDAD, 10)
+    const monto = Number.parseFloat(detalle?.MONTO)
+    return construirFilaDetalleBase({
+      TEXTO: detalle?.TEXTO || '',
+      MONTO: Number.isNaN(monto) ? 0 : monto,
+      CANTIDAD: Number.isNaN(cantidad) ? 1 : cantidad,
+      HORA: detalle?.HORA || '00:00:00',
+      GRACIA: detalle?.GRACIA || '00:00:00',
+      ACTIVO: transformarValorActivo(detalle?.ACTIVO, true),
+    })
+  })
+}
+
+function normalizarListaDetalle(lista = []) {
+  return lista.map((fila) => ({
+    TEXTO: String(fila?.TEXTO || '').trim(),
+    MONTO: Number.parseFloat(fila?.MONTO) || 0,
+    CANTIDAD: Number.parseInt(fila?.CANTIDAD, 10) || 0,
+    HORA: fila?.HORA || '00:00:00',
+    GRACIA: fila?.GRACIA || '00:00:00',
+    ACTIVO: transformarValorActivo(fila?.ACTIVO, false),
+  }))
+}
+
+function validarListaDetalles(lista = []) {
+  if (!lista.length) {
+    return { ok: false, error: 'Configura al menos un detalle para el item.' }
+  }
+
+  const detalleInvalido = lista.some((detalle) => {
+    const texto = detalle?.TEXTO ? String(detalle.TEXTO).trim() : ''
+    const monto = Number.parseFloat(detalle?.MONTO)
+    const cantidad = Number.parseInt(detalle?.CANTIDAD, 10)
+    return !texto || Number.isNaN(monto) || monto <= 0 || Number.isNaN(cantidad) || cantidad <= 0
+  })
+
+  if (detalleInvalido) {
+    return {
+      ok: false,
+      error: 'Cada detalle debe incluir texto, monto (>0) y cantidad (>0).',
+    }
+  }
+
+  return { ok: true }
+}
+
+// function formatearFecha(fecha) {
+//   if (!fecha) return 'Sin registro'
+//   const valor = new Date(fecha)
+//   if (Number.isNaN(valor.getTime())) return 'Sin registro'
+//   return new Intl.DateTimeFormat('es-SV', {
+//     dateStyle: 'medium',
+//     timeStyle: 'short',
+//   }).format(valor)
+// }
 
 function formatearMonto(valor) {
   const numero = Number.parseFloat(valor || 0)
@@ -158,6 +256,19 @@ function mostrarRelacion(item) {
   const rel = item.expand?.REL_TIPO_ITEM
   if (rel?.id) return rel.id
   return item.REL_TIPO_ITEM || '—'
+}
+
+function mostrarTipoSeleccionado(item) {
+  if (!item) return 'Sin asignar'
+
+  // Si tenemos REL_TIPO_ITEM, buscar el tipo en la lista
+  if (item.REL_TIPO_ITEM) {
+    const tipo = tiposDisponibles.value.find((t) => t.id === item.REL_TIPO_ITEM)
+    if (tipo) return tipo.name
+  }
+
+  // Fallback al campo TIPO
+  return item.TIPO || 'Sin asignar'
 }
 
 function seleccionarItemPorDefecto() {
@@ -225,6 +336,21 @@ watch(
 )
 
 watch(
+  detalleEdicion,
+  (lista) => {
+    if (!itemEditando.value) return
+    const detalleNormalizado = normalizarListaDetalle(lista)
+    itemEditando.value.DATA_OBJETO = {
+      ...(itemEditando.value.DATA_OBJETO && typeof itemEditando.value.DATA_OBJETO === 'object'
+        ? { ...itemEditando.value.DATA_OBJETO }
+        : {}),
+      DETALLE: detalleNormalizado,
+    }
+  },
+  { deep: true },
+)
+
+watch(
   () => nuevoItem.CODE,
   (valor) => {
     if (typeof valor !== 'string' || !valor) return
@@ -281,22 +407,121 @@ function abrirNuevo() {
   mostrarForm.value = true
 }
 
-function abrirEdicion(item) {
+function verDetallesItem(item) {
   if (!item) return
-  mostrarForm.value = true
-  editId.value = item.id
-  Object.assign(nuevoItem, {
+  seleccionarItem(item.id)
+  abrirModal({ contexto: 'existente' })
+}
+
+async function abrirModalEditar(item) {
+  if (!item) return
+  editFeedback.value = null
+  editProcesando.value = false
+
+  // Clonar el item para edición sin afectar el original
+  itemEditando.value = {
+    ...item,
+    // Asegurar que los datos estén disponibles
     ACTIVA: Boolean(item.ACTIVA),
     DESCRIPCION: item.DESCRIPCION || '',
-    REL_TIPO_ITEM: item.REL_TIPO_ITEM || '',
     TIPO: item.TIPO || '',
+    REL_TIPO_ITEM: item.REL_TIPO_ITEM || '',
     CODE: item.CODE || '',
     name: item.name || '',
-    DATA_OBJETO: {
-      ...(item.DATA_OBJETO || {}),
-      DETALLE: Array.isArray(item.DATA_OBJETO?.DETALLE) ? [...item.DATA_OBJETO.DETALLE] : [],
-    },
-  })
+    DATA_OBJETO: item.DATA_OBJETO || { DETALLE: [] },
+  }
+
+  inicializarDetalleEdicion(itemEditando.value)
+  detalleEdicionFeedback.value = null
+
+  modalEditarVisible.value = true
+}
+function cerrarModalEditar(force = false) {
+  if (editProcesando.value && !force) return
+  modalEditarVisible.value = false
+  itemEditando.value = null
+  editFeedback.value = null
+  editProcesando.value = false
+  detalleEdicion.value = []
+  detalleEdicionFeedback.value = null
+}
+
+function actualizarTipoProducto() {
+  if (!itemEditando.value || !itemEditando.value.REL_TIPO_ITEM) {
+    itemEditando.value.TIPO = ''
+    return
+  }
+
+  // Buscar el tipo seleccionado y actualizar el campo TIPO
+  const tipoSeleccionado = tiposDisponibles.value.find(
+    (tipo) => tipo.id === itemEditando.value.REL_TIPO_ITEM,
+  )
+
+  if (tipoSeleccionado) {
+    itemEditando.value.TIPO = tipoSeleccionado.name
+  }
+}
+
+async function guardarEdicionProducto() {
+  if (!itemEditando.value || editProcesando.value) return
+
+  if (!validarDetallesEdicion()) {
+    return
+  }
+
+  editProcesando.value = true
+  editFeedback.value = null
+
+  const detallesNormalizados = normalizarListaDetalle(detalleEdicion.value)
+  const dataObjeto = {
+    ...(itemEditando.value.DATA_OBJETO && typeof itemEditando.value.DATA_OBJETO === 'object'
+      ? { ...itemEditando.value.DATA_OBJETO }
+      : {}),
+    DETALLE: detallesNormalizados,
+  }
+
+  const payload = {
+    ACTIVA: itemEditando.value.ACTIVA,
+    DESCRIPCION: itemEditando.value.DESCRIPCION || '',
+    TIPO: itemEditando.value.TIPO || '',
+    REL_TIPO_ITEM: itemEditando.value.REL_TIPO_ITEM || '',
+    CODE: itemEditando.value.CODE || '',
+    name: itemEditando.value.name || '',
+    DATA_OBJETO: dataObjeto,
+  }
+
+  try {
+    const respuesta = await inventarioStore.editarItem(itemEditando.value.id, payload, {
+      refrescar: true,
+    })
+
+    if (!respuesta.ok) {
+      editFeedback.value = {
+        tipo: 'error',
+        msg: respuesta.error || 'No se pudo actualizar el producto',
+      }
+      return
+    }
+
+    // Recargar inventario para reflejar cambios
+    await cargarInventario({ page: String(paginaActual.value) })
+
+    // Cerrar modal y mostrar mensaje de éxito
+    cerrarModalEditar(true)
+    feedbackCreacion.value = { tipo: 'ok', msg: 'Producto actualizado correctamente' }
+
+    // Mantener selección en el item editado
+    if (respuesta.item?.id) {
+      selectedId.value = respuesta.item.id
+    }
+  } catch (error) {
+    editFeedback.value = {
+      tipo: 'error',
+      msg: error.message || 'Error inesperado al actualizar el producto',
+    }
+  } finally {
+    editProcesando.value = false
+  }
 }
 
 function alternarEstadoNuevoItem() {
@@ -305,18 +530,7 @@ function alternarEstadoNuevoItem() {
 }
 
 function agregarFila() {
-  detalleEditable.value = [
-    ...detalleEditable.value,
-    {
-      _uid: `nuevo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      TEXTO: '',
-      MONTO: 0,
-      CANTIDAD: 1,
-      HORA: '00:00:00',
-      GRACIA: '00:00:00',
-      ACTIVO: true,
-    },
-  ]
+  detalleEditable.value = [...detalleEditable.value, construirFilaDetalleBase()]
 }
 
 function eliminarFila(uid) {
@@ -348,13 +562,65 @@ function alternarActivo(uid) {
   )
 }
 
-function validarDetalles() {
-  const faltanTextos = detalleEditable.value.some((fila) => !fila.TEXTO?.trim())
-  if (faltanTextos) {
-    modalFeedback.value = {
-      tipo: 'error',
-      msg: 'Cada fila debe incluir una descripción en el campo TEXTO.',
+function inicializarDetalleEdicion(item) {
+  const detalles = Array.isArray(item?.DATA_OBJETO?.DETALLE) ? item.DATA_OBJETO.DETALLE : []
+  const lista = mapearDetalleEditable(detalles)
+  detalleEdicion.value = lista.length ? lista : [construirFilaDetalleBase()]
+}
+
+function agregarFilaEdicion() {
+  detalleEdicion.value = [...detalleEdicion.value, construirFilaDetalleBase()]
+  detalleEdicionFeedback.value = null
+}
+
+function eliminarFilaEdicion(uid) {
+  detalleEdicion.value = detalleEdicion.value.filter((fila) => fila._uid !== uid)
+  if (!detalleEdicion.value.length) {
+    agregarFilaEdicion()
+  }
+  detalleEdicionFeedback.value = null
+}
+
+function actualizarCampoEdicion(uid, campo, valor) {
+  detalleEdicion.value = detalleEdicion.value.map((fila) => {
+    if (fila._uid !== uid) return fila
+    if (campo === 'ACTIVO') {
+      return { ...fila, [campo]: Boolean(valor) }
     }
+    if (campo === 'CANTIDAD') {
+      const cantidad = Number.parseInt(valor, 10)
+      return { ...fila, [campo]: Number.isNaN(cantidad) ? 0 : cantidad }
+    }
+    if (campo === 'MONTO') {
+      const monto = Number.parseFloat(valor)
+      return { ...fila, [campo]: Number.isNaN(monto) ? 0 : monto }
+    }
+    return { ...fila, [campo]: valor }
+  })
+  detalleEdicionFeedback.value = null
+}
+
+function alternarActivoEdicion(uid) {
+  detalleEdicion.value = detalleEdicion.value.map((fila) =>
+    fila._uid === uid ? { ...fila, ACTIVO: !fila.ACTIVO } : fila,
+  )
+  detalleEdicionFeedback.value = null
+}
+
+function validarDetallesEdicion() {
+  const resultado = validarListaDetalles(detalleEdicion.value)
+  if (!resultado.ok) {
+    detalleEdicionFeedback.value = { tipo: 'error', msg: resultado.error }
+    return false
+  }
+  detalleEdicionFeedback.value = null
+  return true
+}
+
+function validarDetalles() {
+  const resultado = validarListaDetalles(detalleEditable.value)
+  if (!resultado.ok) {
+    modalFeedback.value = { tipo: 'error', msg: resultado.error }
     return false
   }
   modalFeedback.value = null
@@ -363,14 +629,10 @@ function validarDetalles() {
 
 function abrirModal({ contexto = 'existente' } = {}) {
   modalFeedback.value = null
-  const timestamp = Date.now()
   if (contexto === 'nuevo') {
     modalContexto.value = { tipo: 'nuevo' }
     const detalles = nuevoItem.DATA_OBJETO?.DETALLE || []
-    detalleEditable.value = detalles.map((detalle, index) => ({
-      ...detalle,
-      _uid: `${detalle.TEXTO || 'detalle'}-${index}-${timestamp + index}`,
-    }))
+    detalleEditable.value = mapearDetalleEditable(detalles)
     modalAbierto.value = true
     if (!detalleEditable.value.length) agregarFila()
     return
@@ -379,10 +641,7 @@ function abrirModal({ contexto = 'existente' } = {}) {
   if (!item) return
   modalContexto.value = { tipo: 'existente', id: item.id }
   const detalles = Array.isArray(item.DATA_OBJETO?.DETALLE) ? item.DATA_OBJETO.DETALLE : []
-  detalleEditable.value = detalles.map((detalle, index) => ({
-    ...detalle,
-    _uid: `${detalle.TEXTO || 'detalle'}-${index}-${timestamp + index}`,
-  }))
+  detalleEditable.value = mapearDetalleEditable(detalles)
   modalAbierto.value = true
   if (!detalleEditable.value.length) agregarFila()
 }
@@ -396,15 +655,13 @@ function cerrarModal() {
 
 function guardarCambios() {
   if (!validarDetalles()) return
-  const detalles = detalleEditable.value.map((fila) => {
-    const detalle = { ...fila }
-    delete detalle._uid
-    return {
-      ...detalle,
-      MONTO: Number.parseFloat(detalle.MONTO) || 0,
-      CANTIDAD: Number.parseInt(detalle.CANTIDAD, 10) || 0,
-    }
-  })
+  const detalles = normalizarListaDetalle(
+    detalleEditable.value.map((fila) => {
+      const detalle = { ...fila }
+      delete detalle._uid
+      return detalle
+    }),
+  )
   if (modalContexto.value?.tipo === 'nuevo') {
     nuevoItem.DATA_OBJETO = { ...nuevoItem.DATA_OBJETO, DETALLE: detalles }
     errorDetalle.value = null
@@ -462,20 +719,10 @@ function validarNuevoItem() {
     ? nuevoItem.DATA_OBJETO.DETALLE
     : []
 
-  if (!detalles.length) {
-    errorDetalle.value = 'Configura al menos un detalle para el item.'
+  const validacionDetalles = validarListaDetalles(detalles)
+  if (!validacionDetalles.ok) {
+    errorDetalle.value = validacionDetalles.error
     valido = false
-  } else {
-    const detalleInvalido = detalles.some((detalle) => {
-      const texto = detalle?.TEXTO ? String(detalle.TEXTO).trim() : ''
-      const monto = Number.parseFloat(detalle?.MONTO)
-      const cantidad = Number.parseInt(detalle?.CANTIDAD, 10)
-      return !texto || Number.isNaN(monto) || monto <= 0 || Number.isNaN(cantidad) || cantidad <= 0
-    })
-    if (detalleInvalido) {
-      errorDetalle.value = 'Cada detalle debe incluir texto, monto (>0) y cantidad (>0).'
-      valido = false
-    }
   }
 
   return valido
@@ -488,14 +735,7 @@ async function registrarItem() {
     return
   }
 
-  const detallesNormalizados = nuevoItem.DATA_OBJETO.DETALLE.map((detalle) => ({
-    TEXTO: String(detalle.TEXTO || '').trim(),
-    MONTO: Number.parseFloat(detalle.MONTO) || 0,
-    CANTIDAD: Number.parseInt(detalle.CANTIDAD, 10) || 0,
-    HORA: detalle.HORA || '00:00:00',
-    GRACIA: detalle.GRACIA || '00:00:00',
-    ACTIVO: Boolean(detalle.ACTIVO),
-  }))
+  const detallesNormalizados = normalizarListaDetalle(nuevoItem.DATA_OBJETO.DETALLE)
 
   const dataObjeto = {
     ...(nuevoItem.DATA_OBJETO && typeof nuevoItem.DATA_OBJETO === 'object'
@@ -663,13 +903,13 @@ async function confirmarEliminacion() {
     </section>
 
     <section
-      v-show="mostrarForm"
+      v-show="mostrarForm && !editId"
       class="form-card surface-card elev-2"
-      aria-label="Formulario item"
+      aria-label="Formulario nuevo item"
     >
       <header class="form-head">
         <div>
-          <h3>{{ editId ? 'Editar item de inventario' : 'Nuevo item de inventario' }}</h3>
+          <h3>Nuevo item de inventario</h3>
           <small class="text-muted upper">Se guardará en FacturaPro</small>
         </div>
         <div class="detail-pill">
@@ -727,7 +967,12 @@ async function confirmarEliminacion() {
               placeholder="Genera o ingresa un código"
               :disabled="!!editId"
             />
-            <button type="button" class="mini-btn" :disabled="enviando" @click="generarCodigoItem">
+            <button
+              type="button"
+              class="btn btn-xs btn-outline"
+              :disabled="enviando"
+              @click="generarCodigoItem"
+            >
               Generar
             </button>
           </div>
@@ -803,7 +1048,7 @@ async function confirmarEliminacion() {
             :disabled="cargando"
             @keyup.enter="buscarItems"
           />
-          <button type="button" class="btn-search" :disabled="cargando" @click="buscarItems">
+          <button type="button" class="btn btn-search" :disabled="cargando" @click="buscarItems">
             {{ cargando ? 'Buscando…' : 'Buscar' }}
           </button>
         </div>
@@ -842,7 +1087,7 @@ async function confirmarEliminacion() {
         {{ errorCarga }}
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="table-modern">
           <thead>
             <tr>
               <th>Nombre</th>
@@ -878,18 +1123,21 @@ async function confirmarEliminacion() {
                 <td class="center">
                   <button
                     type="button"
-                    class="table-btn"
-                    :disabled="String(item.id) === String(selectedId)"
-                    @click="seleccionarItem(item.id)"
+                    class="btn btn-xs btn-outline"
+                    @click="verDetallesItem(item)"
                   >
-                    {{ String(item.id) === String(selectedId) ? 'Seleccionado' : 'Ver' }}
+                    Ver detalle
                   </button>
-                  <button type="button" class="table-btn" @click="abrirEdicion(item)">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-outline"
+                    @click="abrirModalEditar(item)"
+                  >
                     Editar
                   </button>
                   <button
                     type="button"
-                    class="table-btn danger"
+                    class="btn btn-xs btn-danger"
                     :disabled="estaEliminando(item) || eliminando"
                     @click="abrirConfirmacion(item)"
                   >
@@ -950,11 +1198,11 @@ async function confirmarEliminacion() {
       </div>
     </section>
 
-    <section
+    <!-- <section
       v-if="itemSeleccionado"
       class="info-card surface-card elev-2"
       aria-label="Resumen item seleccionado"
-    >
+  >
       <header class="info-head">
         <div>
           <h3 class="info-title">{{ itemSeleccionado.name }}</h3>
@@ -993,7 +1241,7 @@ async function confirmarEliminacion() {
     </section>
     <section v-else class="placeholder-card surface-soft elev-1">
       <p class="text-muted">Registra un item o selecciona uno existente para ver su detalle.</p>
-    </section>
+    </section> -->
 
     <section
       v-if="itemSeleccionado"
@@ -1053,114 +1301,169 @@ async function confirmarEliminacion() {
 
     <div
       v-if="modalAbierto"
-      class="modal-backdrop"
+      class="modal-backdrop-modern"
       role="dialog"
       aria-modal="true"
       aria-labelledby="detalle-modal-title"
       @click.self="cerrarModal"
     >
-      <div class="modal surface-card elev-3">
-        <header class="modal-head">
-          <div>
-            <h4 id="detalle-modal-title">Configurar elementos del item</h4>
-            <p class="text-muted">
+      <div class="modal-modern surface-card elev-4">
+        <header class="modal-header-modern">
+          <div class="modal-title-section">
+            <h4 id="detalle-modal-title" class="modal-title">Configurar Elementos del Item</h4>
+            <p class="modal-subtitle">
               Ajusta cada fila siguiendo la estructura requerida para DATA_OBJETO.DETALLE.
             </p>
           </div>
-          <button type="button" class="close-btn" aria-label="Cerrar" @click="cerrarModal">
+          <button
+            type="button"
+            class="btn btn-icon btn-xs btn-outline"
+            aria-label="Cerrar"
+            @click="cerrarModal"
+          >
             ×
           </button>
         </header>
-        <div class="modal-body">
-          <div class="edicion-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Texto</th>
-                  <th>Cantidad</th>
-                  <th>Monto</th>
-                  <th>Hora</th>
-                  <th>Gracia</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="fila in detalleEditable" :key="fila._uid">
-                  <td>
-                    <input
-                      type="text"
-                      :value="fila.TEXTO"
-                      placeholder="Descripción"
-                      @input="actualizarCampo(fila._uid, 'TEXTO', $event.target.value)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      :value="fila.CANTIDAD"
-                      @input="actualizarCampo(fila._uid, 'CANTIDAD', $event.target.value)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      :value="fila.MONTO"
-                      @input="actualizarCampo(fila._uid, 'MONTO', $event.target.value)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="time"
-                      :value="fila.HORA"
-                      step="1"
-                      @input="actualizarCampo(fila._uid, 'HORA', $event.target.value)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="time"
-                      :value="fila.GRACIA"
-                      step="1"
-                      @input="actualizarCampo(fila._uid, 'GRACIA', $event.target.value)"
-                    />
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      class="chip-btn"
-                      :class="fila.ACTIVO ? 'chip-ok' : 'chip-off'"
-                      @click="alternarActivo(fila._uid)"
-                    >
-                      {{ fila.ACTIVO ? 'Activo' : 'Inactivo' }}
-                    </button>
-                  </td>
-                  <td>
-                    <button type="button" class="table-btn" @click="eliminarFila(fila._uid)">
-                      Quitar
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="table-actions">
-              <button type="button" class="btn btn-outline" @click="agregarFila">
-                Agregar fila
+
+        <div class="modal-content">
+          <div class="modal-stats">
+            <div class="stat-item">
+              <span class="stat-label">Filas</span>
+              <span class="stat-value">{{ detalleEditable.length }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Total Aproximado</span>
+              <span class="stat-value">{{
+                formatearMonto(
+                  detalleEditable.reduce(
+                    (sum, fila) => sum + Number(fila.MONTO || 0) * Number(fila.CANTIDAD || 0),
+                    0,
+                  ),
+                )
+              }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Activos</span>
+              <span class="stat-value">{{ detalleEditable.filter((f) => f.ACTIVO).length }}</span>
+            </div>
+          </div>
+
+          <div class="table-container-modern">
+            <div class="table-scroll-modern">
+              <table class="table-editor">
+                <thead>
+                  <tr>
+                    <th class="col-text">Descripción</th>
+                    <th class="col-number">Cantidad</th>
+                    <th class="col-number">Monto</th>
+                    <th class="col-time">Hora</th>
+                    <th class="col-time">Gracia</th>
+                    <th class="col-status">Estado</th>
+                    <th class="col-actions">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="fila in detalleEditable" :key="fila._uid" class="editor-row">
+                    <td class="col-text">
+                      <div class="input-wrapper">
+                        <input
+                          type="text"
+                          :value="fila.TEXTO"
+                          placeholder="Descripción del elemento"
+                          class="input-modern input-text"
+                          @input="actualizarCampo(fila._uid, 'TEXTO', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-number">
+                      <div class="input-wrapper">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          :value="fila.CANTIDAD"
+                          class="input-modern input-number"
+                          @input="actualizarCampo(fila._uid, 'CANTIDAD', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-number">
+                      <div class="input-wrapper">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          :value="fila.MONTO"
+                          class="input-modern input-number"
+                          @input="actualizarCampo(fila._uid, 'MONTO', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-time">
+                      <div class="input-wrapper">
+                        <input
+                          type="time"
+                          :value="fila.HORA"
+                          step="1"
+                          class="input-modern input-time"
+                          @input="actualizarCampo(fila._uid, 'HORA', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-time">
+                      <div class="input-wrapper">
+                        <input
+                          type="time"
+                          :value="fila.GRACIA"
+                          step="1"
+                          class="input-modern input-time"
+                          @input="actualizarCampo(fila._uid, 'GRACIA', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-status">
+                      <button
+                        type="button"
+                        class="btn btn-xs toggle-status"
+                        :class="fila.ACTIVO ? 'btn-success' : 'btn-outline'"
+                        @click="alternarActivo(fila._uid)"
+                      >
+                        {{ fila.ACTIVO ? 'Activo' : 'Inactivo' }}
+                      </button>
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-danger"
+                        @click="eliminarFila(fila._uid)"
+                        :disabled="detalleEditable.length === 1"
+                        title="Eliminar fila"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="table-footer-modern">
+              <button type="button" class="btn btn-outline btn-sm" @click="agregarFila">
+                <span>+ Agregar Fila</span>
               </button>
             </div>
           </div>
-          <p v-if="modalFeedback" class="modal-feedback" :class="modalFeedback.tipo">
-            {{ modalFeedback.msg }}
-          </p>
+
+          <div v-if="modalFeedback" class="alert-modern" :class="modalFeedback.tipo">
+            <span class="alert-icon">⚠</span>
+            <span class="alert-message">{{ modalFeedback.msg }}</span>
+          </div>
         </div>
-        <footer class="modal-foot">
-          <button type="button" class="btn" @click="cerrarModal">Cancelar</button>
+
+        <footer class="modal-footer-modern">
+          <button type="button" class="btn btn-outline" @click="cerrarModal">Cancelar</button>
           <button type="button" class="btn btn-primary" @click="guardarCambios">
-            Guardar cambios
+            Guardar Cambios
           </button>
         </footer>
       </div>
@@ -1212,6 +1515,278 @@ async function confirmarEliminacion() {
           @click="confirmarEliminacion"
         >
           {{ eliminando ? 'Eliminando…' : 'Eliminar' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal de Edición de Producto -->
+  <div
+    v-if="modalEditarVisible"
+    class="modal-backdrop-modern"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="edit-modal-title"
+    @click.self="cerrarModalEditar"
+  >
+    <div class="modal-modern-edit surface-card elev-3">
+      <header class="modal-header-modern">
+        <div class="modal-title-section">
+          <h4 id="edit-modal-title" class="modal-title">Editar Producto</h4>
+          <p class="modal-subtitle">Actualiza la información del producto del inventario.</p>
+        </div>
+        <button
+          type="button"
+          class="btn btn-xs btn-outline"
+          :disabled="editProcesando"
+          aria-label="Cerrar"
+          @click="cerrarModalEditar"
+        >
+          ✕
+        </button>
+      </header>
+
+      <div class="modal-body-split">
+        <section class="edit-pane">
+          <div class="modal-stats">
+            <div class="stat-item">
+              <div class="stat-label">Código</div>
+              <div class="stat-value">{{ itemEditando?.CODE || 'N/A' }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Estado</div>
+              <div class="stat-value">{{ itemEditando?.ACTIVA ? 'Activo' : 'Inactivo' }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Tipo</div>
+              <div class="stat-value">{{ mostrarTipoSeleccionado(itemEditando) }}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Detalles</div>
+              <div class="stat-value">{{ detalleEdicionStats.total }}</div>
+            </div>
+          </div>
+
+          <div class="form-container-modern">
+            <div class="product-edit-form">
+              <div class="f-group">
+                <label>Nombre del Producto</label>
+                <input
+                  type="text"
+                  v-model="itemEditando.name"
+                  class="input-modern"
+                  placeholder="Nombre del producto"
+                />
+              </div>
+
+              <div class="f-group span-2">
+                <label>Descripción</label>
+                <textarea
+                  v-model="itemEditando.DESCRIPCION"
+                  class="input-modern"
+                  rows="4"
+                  placeholder="Descripción del producto"
+                ></textarea>
+              </div>
+
+              <div class="f-group">
+                <label>Código Interno</label>
+                <input
+                  type="text"
+                  v-model="itemEditando.CODE"
+                  class="input-modern"
+                  placeholder="Código interno"
+                  disabled
+                />
+              </div>
+
+              <div class="f-group">
+                <label>Tipo</label>
+                <select
+                  v-model="itemEditando.REL_TIPO_ITEM"
+                  class="input-modern"
+                  @change="actualizarTipoProducto"
+                >
+                  <option value="">Seleccionar tipo</option>
+                  <option v-for="tipo in tiposDisponibles" :key="tipo.id" :value="tipo.id">
+                    {{ tipo.name }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="f-group">
+                <label>Estado</label>
+                <button
+                  type="button"
+                  class="btn btn-sm toggle-status"
+                  :class="itemEditando?.ACTIVA ? 'btn-success' : 'btn-outline'"
+                  @click="itemEditando.ACTIVA = !itemEditando.ACTIVA"
+                >
+                  {{ itemEditando?.ACTIVA ? 'Activo' : 'Inactivo' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="editFeedback" class="alert-modern" :class="editFeedback.tipo">
+            <span class="alert-icon">{{ editFeedback.tipo === 'error' ? '⚠️' : '✅' }}</span>
+            <span class="alert-message">{{ editFeedback.msg }}</span>
+          </div>
+        </section>
+
+        <section class="detail-pane">
+          <div class="detail-pane-head">
+            <h5>Detalles del producto</h5>
+            <p class="detail-pane-subtitle text-muted">
+              Ajusta cada fila de DATA_OBJETO.DETALLE para reflejar el contenido comercial.
+            </p>
+          </div>
+
+          <div class="detail-pane-stats">
+            <div class="stat-item">
+              <span class="stat-label">Filas</span>
+              <span class="stat-value">{{ detalleEdicionStats.total }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Total estimado</span>
+              <span class="stat-value">{{ formatearMonto(detalleEdicionStats.monto) }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Activos</span>
+              <span class="stat-value">{{ detalleEdicionStats.activos }}</span>
+            </div>
+          </div>
+
+          <div class="detail-table-wrapper">
+            <div class="table-scroll-modern">
+              <table class="table-editor">
+                <thead>
+                  <tr>
+                    <th class="col-text">Descripción</th>
+                    <th class="col-number">Cantidad</th>
+                    <th class="col-number">Monto</th>
+                    <th class="col-time">Hora</th>
+                    <th class="col-time">Gracia</th>
+                    <th class="col-status">Estado</th>
+                    <th class="col-actions">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="fila in detalleEdicion" :key="fila._uid" class="editor-row">
+                    <td class="col-text">
+                      <div class="input-wrapper">
+                        <input
+                          type="text"
+                          :value="fila.TEXTO"
+                          placeholder="Descripción del elemento"
+                          class="input-modern input-text"
+                          @input="actualizarCampoEdicion(fila._uid, 'TEXTO', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-number">
+                      <div class="input-wrapper">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          :value="fila.CANTIDAD"
+                          class="input-modern input-number"
+                          @input="
+                            actualizarCampoEdicion(fila._uid, 'CANTIDAD', $event.target.value)
+                          "
+                        />
+                      </div>
+                    </td>
+                    <td class="col-number">
+                      <div class="input-wrapper">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          :value="fila.MONTO"
+                          class="input-modern input-number"
+                          @input="actualizarCampoEdicion(fila._uid, 'MONTO', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-time">
+                      <div class="input-wrapper">
+                        <input
+                          type="time"
+                          :value="fila.HORA"
+                          step="1"
+                          class="input-modern input-time"
+                          @input="actualizarCampoEdicion(fila._uid, 'HORA', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-time">
+                      <div class="input-wrapper">
+                        <input
+                          type="time"
+                          :value="fila.GRACIA"
+                          step="1"
+                          class="input-modern input-time"
+                          @input="actualizarCampoEdicion(fila._uid, 'GRACIA', $event.target.value)"
+                        />
+                      </div>
+                    </td>
+                    <td class="col-status">
+                      <button
+                        type="button"
+                        class="btn btn-xs toggle-status"
+                        :class="fila.ACTIVO ? 'btn-success' : 'btn-outline'"
+                        @click="alternarActivoEdicion(fila._uid)"
+                      >
+                        {{ fila.ACTIVO ? 'Activo' : 'Inactivo' }}
+                      </button>
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-danger"
+                        @click="eliminarFilaEdicion(fila._uid)"
+                        :disabled="detalleEdicion.length === 1"
+                        title="Eliminar fila"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="detail-actions">
+            <button type="button" class="btn btn-outline btn-sm" @click="agregarFilaEdicion">
+              + Agregar fila
+            </button>
+          </div>
+
+          <div
+            v-if="detalleEdicionFeedback"
+            class="alert-modern"
+            :class="detalleEdicionFeedback.tipo"
+          >
+            <span class="alert-icon">⚠</span>
+            <span class="alert-message">{{ detalleEdicionFeedback.msg }}</span>
+          </div>
+        </section>
+      </div>
+
+      <footer class="modal-footer-modern">
+        <button type="button" class="btn" @click="cerrarModalEditar" :disabled="editProcesando">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="editProcesando"
+          @click="guardarEdicionProducto"
+        >
+          {{ editProcesando ? 'Guardando…' : 'Guardar Cambios' }}
         </button>
       </footer>
     </div>
@@ -1833,70 +2408,501 @@ async function confirmarEliminacion() {
   color: #b42318;
 }
 
-.modal-backdrop {
+/* Modal Moderno Mejorado */
+.modal-backdrop-modern {
   position: fixed;
   inset: 0;
-  background: rgba(17 24 39 / 0.45);
-  backdrop-filter: blur(4px);
+  background: rgba(17 24 39 / 0.65);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-6);
+  padding: var(--space-4);
   z-index: 60;
+  animation: fadeInBackdrop 0.3s ease-out;
 }
-.modal {
-  width: min(920px, 100%);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6) var(--space-6);
+
+@keyframes fadeInBackdrop {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+.modal-modern {
+  width: min(1100px, 95vw);
+  max-height: 90vh;
+  border-radius: var(--radius-2xl);
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: slideInModal 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  background: var(--color-background);
 }
-.modal-head {
+
+@keyframes slideInModal {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-header-modern {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-soft);
 }
-.modal-body {
+
+.modal-title-section {
+  flex: 1;
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-2) 0;
+  letter-spacing: 0.3px;
+}
+
+.modal-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  opacity: 0.7;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.modal-content {
+  flex: 1;
+  padding: var(--space-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.modal-stats {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-background-soft);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+.stat-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+
+.table-container-modern {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.table-scroll-modern {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.table-editor {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+  min-width: 720px;
+}
+
+.table-editor thead th {
+  background: var(--color-background-soft);
+  padding: var(--space-3) var(--space-3);
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-heading);
+  border-bottom: 2px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-editor .col-text {
+  width: 35%;
+  min-width: 200px;
+}
+
+.table-editor .col-number {
+  width: 12%;
+  min-width: 80px;
+}
+
+.table-editor .col-time {
+  width: 12%;
+  min-width: 90px;
+}
+
+.table-editor .col-status {
+  width: 15%;
+  min-width: 100px;
+}
+
+.table-editor .col-actions {
+  width: 10%;
+  min-width: 60px;
+  text-align: center;
+}
+
+.editor-row {
+  transition: background var(--transition-base);
+}
+
+.editor-row:hover {
+  background: var(--color-background-soft);
+}
+
+.editor-row td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.input-wrapper {
+  width: 100%;
+  position: relative;
+}
+
+.input-modern {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.input-modern:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb) / 0.15);
+}
+
+.input-text {
+  min-width: 180px;
+}
+
+.input-number {
+  text-align: right;
+}
+
+.input-time {
+  font-family: ui-monospace, monospace;
+}
+
+.toggle-status {
+  min-width: 80px;
+  white-space: nowrap;
+}
+
+.table-footer-modern {
+  padding: var(--space-3);
+  background: var(--color-background-soft);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.alert-modern {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.alert-modern.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.alert-icon {
+  font-size: 0.9rem;
+}
+
+.alert-message {
+  flex: 1;
+}
+
+.modal-footer-modern {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-background-soft);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal-modern {
+    width: 95vw;
+    max-height: 95vh;
+  }
+
+  .modal-header-modern,
+  .modal-content,
+  .modal-footer-modern {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .modal-stats {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .stat-item {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .table-editor {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-backdrop-modern {
+    padding: var(--space-2);
+  }
+
+  .modal-modern {
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+  }
+}
+
+/* Modal de Edición de Producto */
+.modal-modern-edit {
+  width: min(1100px, 96vw);
+  max-height: 90vh;
+  border-radius: var(--radius-2xl);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: slideInModal 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  background: var(--color-background);
+}
+
+.modal-body-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(420px, 1.15fr);
+  gap: var(--space-6);
+  padding: var(--space-6);
+  padding-top: var(--space-2);
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.edit-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.detail-pane {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-.edicion-table {
-  width: 100%;
-  overflow-x: auto;
-}
-.edicion-table table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 820px;
-  font-size: 0.75rem;
-}
-.edicion-table thead th {
-  text-align: left;
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.55px;
-  padding: 0.65rem 0.75rem;
   background: var(--color-background-soft);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  min-width: 0;
 }
-.edicion-table tbody td {
-  padding: 0.55rem 0.75rem;
-  border-top: 1px solid var(--color-border);
+
+.detail-pane-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
-.edicion-table input {
-  width: 100%;
+
+.detail-pane-head h5 {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.detail-pane-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+.detail-pane-stats .stat-item {
+  background: var(--color-background);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.detail-table-wrapper {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  overflow: hidden;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-pane .alert-modern {
+  margin: 0;
+}
+
+@media (max-width: 1020px) {
+  .modal-body-split {
+    grid-template-columns: 1fr;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: var(--space-5);
+  }
+
+  .detail-pane {
+    margin-bottom: var(--space-3);
+  }
+}
+
+.product-edit-form {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.f-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.f-group label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text);
+  opacity: 0.8;
+}
+
+.f-group .input-modern,
+.f-group textarea,
+.f-group select {
   border: 1px solid var(--color-border);
   background: var(--color-background-soft);
+  padding: 0.75rem 0.85rem;
   border-radius: var(--radius-md);
-  padding: 0.45rem 0.55rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+  width: 100%;
+  font-family: inherit;
 }
-.edicion-table input:focus {
-  outline: 2px solid rgba(var(--brand-primary-rgb) / 0.3);
+
+.f-group .input-modern:focus,
+.f-group textarea:focus,
+.f-group select:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb) / 0.15);
   background: var(--color-background);
 }
+
+.f-group .input-modern:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--color-background-mute);
+}
+
+.f-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Responsive para formulario de producto */
+@media (max-width: 768px) {
+  .product-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-modern-edit {
+    width: 95vw;
+    max-height: 95vh;
+  }
+
+  .modal-body-split {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  .detail-pane {
+    padding: var(--space-4);
+  }
+}
+
 .chip-btn {
   border: 0;
   display: inline-flex;

@@ -11,8 +11,8 @@ const menu = [
   { label: 'Facturas', to: '/dashboard/facturas', icon: 'doc' },
   { label: 'Clientes', to: '/dashboard/clientes', icon: 'users' },
   { label: 'Productos', to: '/dashboard/productos', icon: 'shopping-cart' },
-  { label: 'Inventario', to: '/dashboard/inventario-items', icon: 'layers' },
-  { label: 'Reportes', to: '/dashboard/reportes', icon: 'chart' },
+  // { label: 'Inventario', to: '/dashboard/inventario-items', icon: 'layers' },
+  // { label: 'Reportes', to: '/dashboard/reportes', icon: 'chart' },
 ]
 
 const secondary = [{ label: 'Configuración', to: '/dashboard/configuracion', icon: 'settings' }]

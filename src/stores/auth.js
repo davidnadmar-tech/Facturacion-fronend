@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
-import api from '@/api/axiosConection'
+import api, { API_GATEWAY_URL } from '@/api/axiosConection'
 
 // Clave de persistencia versionada
 const LS_KEY = 'auth_v1'
 
 // Endpoint ABSOLUTO (no duplicar axios.create): se usará URL completa
-const AUTH_BASE_URL = 'http://localhost:5000/ApiFacturador/'
+const AUTH_BASE_URL = API_GATEWAY_URL
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({

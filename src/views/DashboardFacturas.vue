@@ -49,7 +49,7 @@ function ver(f) {
       <div class="right">
         <div class="search-group">
           <input v-model.trim="filtro" type="text" placeholder="Buscar (código, cliente, NIT)" />
-          <button class="btn-search" type="button" disabled>Filtrar</button>
+          <button class="btn btn-search" type="button" disabled>Filtrar</button>
         </div>
         <RouterLink to="/dashboard/facturas/nueva" class="btn btn-primary">Nueva</RouterLink>
       </div>
@@ -61,7 +61,7 @@ function ver(f) {
         <small class="text-muted" v-if="filtro">Filtro activo</small>
       </header>
       <div class="table-scroll">
-        <table>
+        <table class="table-modern">
           <thead>
             <tr>
               <th v-for="col in columnas" :key="col.key" :class="{ center: col.center }">
@@ -82,8 +82,8 @@ function ver(f) {
               <td>{{ formatear(f.montos?.iva) }}</td>
               <td>{{ formatear(f.montos?.total) }}</td>
               <td class="center acciones-col">
-                <button class="table-btn" type="button" @click="ver(f)">Ver</button>
-                <button class="table-btn danger" type="button" @click="eliminar(f.codigo)">
+                <button class="btn btn-xs btn-outline" type="button" @click="ver(f)">Ver</button>
+                <button class="btn btn-xs btn-danger" type="button" @click="eliminar(f.codigo)">
                   Borrar
                 </button>
               </td>

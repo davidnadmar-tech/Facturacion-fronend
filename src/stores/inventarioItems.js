@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
-import api from '@/api/axiosConection'
-
-const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
+import api, { API_GATEWAY_URL, isSuccessResponse } from '@/api/axiosConection'
 
 function parseJsonMaybe(valor) {
   if (!valor) return null
@@ -163,7 +161,7 @@ export const useInventarioItemsStore = defineStore('inventarioItems', {
         const { data } = await api.post(API_GATEWAY_URL, body, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo consultar inventario'
           this.error = msg
           return { ok: false, error: msg }
@@ -218,7 +216,7 @@ export const useInventarioItemsStore = defineStore('inventarioItems', {
         const { data } = await api.post(API_GATEWAY_URL, payload, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo guardar el item'
           return { ok: false, error: msg }
         }
@@ -273,7 +271,7 @@ export const useInventarioItemsStore = defineStore('inventarioItems', {
         const { data } = await api.post(API_GATEWAY_URL, payload, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo actualizar el item'
           this.error = msg
           return { ok: false, error: msg }
@@ -321,7 +319,7 @@ export const useInventarioItemsStore = defineStore('inventarioItems', {
         const { data } = await api.post(API_GATEWAY_URL, payload, {
           headers: { 'Content-Type': 'application/json' },
         })
-        if (!data || data.Estado !== 2) {
+        if (!isSuccessResponse(data)) {
           const msg = data?.Mensaje || 'No se pudo eliminar el item'
           this.error = msg
           return { ok: false, error: msg }
