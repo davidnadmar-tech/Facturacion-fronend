@@ -10,7 +10,9 @@ const menu = [
   { label: 'Resumen', to: '/dashboard', icon: 'grid' },
   { label: 'Facturas', to: '/dashboard/facturas', icon: 'doc' },
   { label: 'Clientes', to: '/dashboard/clientes', icon: 'users' },
-  { label: 'Reportes', to: '/dashboard/reportes', icon: 'chart' },
+  { label: 'Productos', to: '/dashboard/productos', icon: 'shopping-cart' },
+  // { label: 'Inventario', to: '/dashboard/inventario-items', icon: 'layers' },
+  // { label: 'Reportes', to: '/dashboard/reportes', icon: 'chart' },
 ]
 
 const secondary = [{ label: 'Configuración', to: '/dashboard/configuracion', icon: 'settings' }]
@@ -160,7 +162,10 @@ export function icon(name) {
     doc: 'M6 2h7l5 5v13.25A1.75 1.75 0 0 1 16.25 22H6.75A1.75 1.75 0 0 1 5 20.25V3.75A1.75 1.75 0 0 1 6.75 2H6Zm7 6V3.5L18.5 8H13Z',
     users:
       'M7 11a4 4 0 1 1 2.83-6.83A5.5 5.5 0 0 1 15.5 4c.51 0 1 .07 1.47.2a4 4 0 0 1 2.03 6.63A5.5 5.5 0 0 1 22 16.5V18h-2v-1.5a3.5 3.5 0 0 0-3.5-3.5h-7A3.5 3.5 0 0 0 6 16.5V18H4v-1.5a5.5 5.5 0 0 1 3.17-5A4 4 0 0 1 7 11Zm3.5 2h3a5.5 5.5 0 0 1 5.5 5.5V21h-2v-1.5a3.5 3.5 0 0 0-3.5-3.5h-3a3.5 3.5 0 0 0-3.5 3.5V21H6v-1.5a5.5 5.5 0 0 1 5.5-5.5Z',
+    'shopping-cart':
+      'M7.4 4 9 8h9l1.2 3H8.1l-.7-2H3v-2l2.6-5H7.4Zm-.1 9H21v2h-2.26a3 3 0 1 1-5.48 0H11.5a3 3 0 1 1-5.48 0H3v-2h4.3ZM11 15a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z',
     chart: 'M4 20V9h3v11H4Zm6 0V4h3v16h-3Zm6 0v-8h3v8h-3Z',
+    layers: 'M3 7l9-4 9 4-9 4-9-4Zm0 9 9-4 9 4-9 4-9-4Zm0-4.5 9-4 9 4-9 4-9-4Z',
     settings:
       'M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7ZM4 13.2v-2.4l2.06-.32a6 6 0 0 1 .6-1.46l-1.2-1.7 1.7-1.7 1.7 1.2a6 6 0 0 1 1.46-.6L10.8 4h2.4l.32 2.06a6 6 0 0 1 1.46.6l1.7-1.2 1.7 1.7-1.2 1.7a6 6 0 0 1 .6 1.46L20 10.8v2.4l-2.06.32a6 6 0 0 1-.6 1.46l1.2 1.7-1.7 1.7-1.7-1.2a6 6 0 0 1-1.46.6L13.2 20h-2.4l-.32-2.06a6 6 0 0 1-1.46-.6l-1.7 1.2-1.7-1.7 1.2-1.7a6 6 0 0 1-.6-1.46L4 13.2Z',
     user: 'M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z',

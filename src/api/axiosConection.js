@@ -1,9 +1,19 @@
 import axios from 'axios'
 
+export const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
+
 const api = axios.create({
-  baseURL: 'http://localhost:9090/',
+  baseURL: API_GATEWAY_URL,
   // otras configuraciones globales aquí
 })
+
+// Función de utilidad para validar respuestas exitosas de la API
+export function isSuccessResponse(data) {
+  // Estados exitosos según la API:
+  // 1 = "Proceso ejecutado correctamente"
+  // 2 = "Exito"
+  return data && (data.Estado === 1 || data.Estado === 2)
+}
 
 // Cargar token si existe (sin importar el store) para primeras llamadas
 try {

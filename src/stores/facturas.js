@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import api, { API_GATEWAY_URL, isSuccessResponse } from '@/api/axiosConection'
 
 /*
  Estructura de factura (simplificada - solo para UI local):
@@ -28,7 +29,7 @@ function generarCodigo(last) {
 }
 
 export const useFacturasStore = defineStore('facturas', {
-  state: () => ({ lista: [], cargado: false }),
+  state: () => ({ lista: [], cargado: false, enviando: false, error: null }),
   getters: {
     total: (s) => s.lista.length,
     ultimoCodigo: (s) => (s.lista.length ? s.lista[s.lista.length - 1].codigo : null),
@@ -75,16 +76,122 @@ export const useFacturasStore = defineStore('facturas', {
       if (!base.cliente || !base.cliente.nombre) errores.cliente = 'Cliente requerido'
       return errores
     },
-    emitir(datos) {
+    async emitir(datos) {
+      // Sustituye la lógica local por POST a API: guardarfactura (creación)
       this.cargarLocal()
-      const codigo = generarCodigo(this.ultimoCodigo)
+      this.error = null
+      const codigoLocal = generarCodigo(this.ultimoCodigo)
       const now = new Date().toISOString()
-      const base = { ...datos, codigo, createdAt: now }
+      const base = { ...datos, codigo: codigoLocal, createdAt: now }
       const errores = this.validar(base)
       if (Object.keys(errores).length) return { ok: false, errores }
-      this.lista.push(base)
-      this.persistir()
-      return { ok: true, item: base }
+
+      // Construcción de payload según contrato
+      const fechaStr = typeof base.fecha === 'string' ? base.fecha : new Date().toISOString()
+      const fechaISO = (() => {
+        try {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr))
+            return new Date(`${fechaStr}T00:00:00.000Z`).toISOString()
+          return new Date(fechaStr).toISOString()
+        } catch {
+          return new Date().toISOString()
+        }
+      })()
+
+      const condicionPago = base.condicionPago || null
+      const totalPagar =
+        base?.montos?.total ??
+        (() => {
+          const gravado = (base.items || [])
+            .filter((i) => i.tipo === 'gravado')
+            .reduce((acc, it) => acc + Number(it.cantidad || 0) * Number(it.precio || 0), 0)
+          const exento = (base.items || [])
+            .filter((i) => i.tipo === 'exento')
+            .reduce((acc, it) => acc + Number(it.cantidad || 0) * Number(it.precio || 0), 0)
+          const noSujeto = (base.items || [])
+            .filter((i) => i.tipo === 'no_sujeto')
+            .reduce((acc, it) => acc + Number(it.cantidad || 0) * Number(it.precio || 0), 0)
+          const iva = gravado * 0.13
+          return gravado + exento + noSujeto + iva
+        })()
+
+      const objeto = {
+        name: base?.cliente?.nombre || 'Factura',
+        FECHA: fechaISO,
+        // Campos TIPODOC y PUNTO_VENTA podrían venir de catálogos; si no hay, se omiten
+        TIPODOC: base?.TIPODOC || base?.tipoDocumentoId || undefined,
+        PUNTO_VENTA: base?.PUNTO_VENTA || undefined,
+        CODCLIENTE: base?.cliente?.backendId || base?.cliente?.codigo || undefined,
+        CLIENTE: base?.cliente?.nombre || undefined,
+        // FORMA_PAGO: preferir id/código del catálogo, fallback a condicionPago si existe
+        FORMA_PAGO: base?.formaPago?.id || base?.formaPago?.codigoCFE || condicionPago || undefined,
+        TOTAL_PAGAR: Number(totalPagar?.toFixed ? totalPagar.toFixed(2) : totalPagar) || 0,
+      }
+
+      // Normalizar detalles al formato esperado por la API
+      const detalles = (base.items || []).map((it) => {
+        const cantidad = Number(it.cantidad || 0)
+        const precioU = Number(it.precio || 0)
+        const baseLinea = cantidad * precioU
+        const tipo = it.tipo || 'gravado'
+        const isGravado = tipo === 'gravado'
+        const isExento = tipo === 'exento'
+        const isNoSujeto = tipo === 'no_sujeto'
+        const gravado = isGravado ? baseLinea : 0
+        const iva = isGravado ? +(baseLinea * 0.13).toFixed(2) : 0
+        const exento = isExento ? baseLinea : 0
+        const noSujeto = isNoSujeto ? baseLinea : 0
+        const total = gravado + iva + exento + noSujeto
+        const payload = {
+          DESCRIP: it.descripcion || '',
+          CANTIDAD: cantidad,
+          PRECIO_U: precioU,
+          TOTAL: +total.toFixed(2),
+        }
+        if (gravado) payload.GRAVADO = +gravado.toFixed(2)
+        if (iva) payload.IVA = iva
+        if (exento) payload.EXENTO = +exento.toFixed(2)
+        if (noSujeto) payload.NO_SUJETO = +noSujeto.toFixed(2)
+        if (it.INVCOD) payload.INVCOD = it.INVCOD
+        return payload
+      })
+
+      const body = {
+        vc: 'guardarfactura',
+        edicion: '0',
+        id: '',
+        objeto,
+        detalles,
+      }
+
+      this.enviando = true
+      try {
+        const { data } = await api.post(API_GATEWAY_URL, body, {
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!isSuccessResponse(data)) {
+          const msg = data?.Mensaje || 'No se pudo guardar la factura'
+          this.error = msg
+          return { ok: false, error: msg }
+        }
+        // Mejor esfuerzo para reflejar en la lista local
+        const contenido = data.Contenido || {}
+        const record =
+          contenido?.factura || contenido?.record || contenido?.objeto || data?.objeto || null
+        const created = {
+          ...base,
+          backendId: record?.id || record?.ID || null,
+        }
+        this.lista.push(created)
+        this.persistir()
+        return { ok: true, item: created, raw: data }
+      } catch (e) {
+        const msg = e?.response?.data?.Mensaje || e?.message || 'Error de red'
+        this.error = msg
+        return { ok: false, error: msg }
+      } finally {
+        this.enviando = false
+      }
     },
     eliminar(codigo) {
       const idx = this.lista.findIndex((f) => f.codigo === codigo)

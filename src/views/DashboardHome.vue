@@ -31,9 +31,9 @@ const panels = [
 
     <section class="panel-grid">
       <article v-for="p in panels" :key="p.title" class="panel-card">
-        <header class="panel-head">
+        <header class="placeholder-head">
           <h3>{{ p.title }}</h3>
-          <button class="mini-btn" disabled title="Solo diseño">Ver todo</button>
+          <button class="btn btn-xs btn-outline" disabled title="Solo diseño">Ver todo</button>
         </header>
         <ul class="placeholder-list">
           <li v-for="n in p.lines" :key="n">
