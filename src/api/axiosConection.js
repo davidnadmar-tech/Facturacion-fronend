@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-export const API_GATEWAY_URL = 'http://localhost:5000/ApiFacturador/'
+export const API_GATEWAY_URL = 'http://localhost:5007/ApiFacturador/'
 
 const api = axios.create({
   baseURL: API_GATEWAY_URL,

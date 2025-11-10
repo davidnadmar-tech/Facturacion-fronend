@@ -874,116 +874,87 @@ watch(
         <div v-if="feedback" class="feedback" :class="feedback.tipo">{{ feedback.msg }}</div>
       </form>
     </section>
-    <!-- Tabla -->
-    <section class="table-wrapper surface-card elev-2" aria-label="Listado clientes">
-      <header class="table-head">
-        <h3>Lista de Clientes ({{ totalRegistros }})</h3>
-        <small class="text-muted" v-if="filtro">Filtro activo</small>
-      </header>
-      <div class="table-scroll">
-        <table class="table-modern">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>NRC</th>
-              <th>NIT</th>
-              <th>DUI</th>
-              <th>Email</th>
-              <th>Actividad</th>
-              <th class="center">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in listaFiltrada" :key="c.codigo">
-              <td>{{ c.nombre }}</td>
-              <td>{{ c.nrc }}</td>
-              <td>{{ c.nit }}</td>
-              <td>{{ c.dui }}</td>
-              <td>{{ c.email }}</td>
-              <td class="actividad">{{ c.descripcionActividad }}</td>
-              <td class="center acciones-col">
-                <button
-                  class="btn btn-xs btn-outline"
-                  type="button"
-                  :disabled="buscando"
-                  @click="abrirModalEditar(c)"
-                >
-                  Editar
-                </button>
-                <button
-                  class="btn btn-xs btn-danger"
-                  type="button"
-                  :disabled="buscando || eliminando || estaEliminando(c)"
-                  @click="abrirConfirmacion(c)"
-                >
-                  {{ estaEliminando(c) ? 'Eliminando…' : 'Borrar' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="table-foot">
-        <div class="summary">
-          <span v-if="mostrarResumen">
-            Mostrando {{ rangoInicio }} - {{ rangoFin }} de {{ totalRegistros }}
-          </span>
-          <span v-else>Sin resultados</span>
+    <!-- LISTA DE CLIENTES -->
+<section class="clientes-lista-wrapper surface-card elev-2" aria-label="Listado clientes">
+  <header class="lista-head">
+    <h3>Clientes registrados ({{ totalRegistros }})</h3>
+    <small class="text-muted" v-if="filtro">Filtro activo</small>
+  </header>
+
+  <div class="lista-scroll">
+    <ul class="clientes-lista">
+      <li
+        class="cliente-item"
+        v-for="c in listaFiltrada"
+        :key="c.codigo"
+      >
+        <div class="cliente-info">
+          <h4 class="cliente-nombre">{{ c.nombre }}</h4>
+          <p class="cliente-detalles">
+            <strong>NRC:</strong> {{ c.nrc }} |
+            <strong>NIT:</strong> {{ c.nit }} |
+            <strong>DUI:</strong> {{ c.dui }}
+          </p>
+          <p class="cliente-email"><strong>Email:</strong> {{ c.email }}</p>
+          <p class="cliente-actividad">
+            <strong>Actividad:</strong> {{ c.descripcionActividad }}
+          </p>
         </div>
-        <div class="pager">
+
+        <div class="cliente-acciones">
           <button
-            class="pager-btn"
+            class="btn btn-outline btn-sm"
             type="button"
-            @click="irPrimerPagina"
-            :disabled="buscando || !puedeRetroceder"
-            aria-label="Primera página"
-          >
-            &lt;&lt;
-          </button>
-          <button
-            class="pager-btn"
-            type="button"
-            @click="paginaAnterior"
-            :disabled="buscando || !puedeRetroceder"
-            aria-label="Página anterior"
-          >
-            &lt;
-          </button>
-          <span class="page-indicator">Página {{ paginaActual }} de {{ totalPaginas }}</span>
-          <button
-            class="pager-btn"
-            type="button"
-            @click="paginaSiguiente"
-            :disabled="buscando || !puedeAvanzar"
-            aria-label="Página siguiente"
-          >
-            &gt;
-          </button>
-          <button
-            class="pager-btn"
-            type="button"
-            @click="irUltimaPagina"
-            :disabled="buscando || !puedeAvanzar"
-            aria-label="Última página"
-          >
-            &gt;&gt;
-          </button>
-        </div>
-        <div class="per-page-control">
-          <label class="per-page-label" for="per-page-select">Por página</label>
-          <select
-            id="per-page-select"
-            :value="perPageSeleccionado"
-            @change="onPerPageChange"
             :disabled="buscando"
+            @click="abrirModalEditar(c)"
           >
-            <option v-for="opcion in perPageOptions" :key="opcion" :value="opcion">
-              {{ opcion }}
-            </option>
-          </select>
+            ✏️ Editar
+          </button>
+          <button
+            class="btn btn-danger btn-sm"
+            type="button"
+            :disabled="buscando || eliminando || estaEliminando(c)"
+            @click="abrirConfirmacion(c)"
+          >
+            {{ estaEliminando(c) ? 'Eliminando…' : '🗑️ Borrar' }}
+          </button>
         </div>
-      </div>
-    </section>
+      </li>
+    </ul>
+  </div>
+
+  <footer class="lista-foot">
+    <div class="summary">
+      <span v-if="mostrarResumen">
+        Mostrando {{ rangoInicio }} - {{ rangoFin }} de {{ totalRegistros }}
+      </span>
+      <span v-else>Sin resultados</span>
+    </div>
+
+    <div class="pager">
+      <button class="pager-btn" @click="irPrimerPagina" :disabled="buscando || !puedeRetroceder">&lt;&lt;</button>
+      <button class="pager-btn" @click="paginaAnterior" :disabled="buscando || !puedeRetroceder">&lt;</button>
+      <span class="page-indicator">Página {{ paginaActual }} de {{ totalPaginas }}</span>
+      <button class="pager-btn" @click="paginaSiguiente" :disabled="buscando || !puedeAvanzar">&gt;</button>
+      <button class="pager-btn" @click="irUltimaPagina" :disabled="buscando || !puedeAvanzar">&gt;&gt;</button>
+    </div>
+
+    <div class="per-page-control">
+      <label for="per-page-select">Por página</label>
+      <select
+        id="per-page-select"
+        :value="perPageSeleccionado"
+        @change="onPerPageChange"
+        :disabled="buscando"
+      >
+        <option v-for="opcion in perPageOptions" :key="opcion" :value="opcion">
+          {{ opcion }}
+        </option>
+      </select>
+    </div>
+  </footer>
+</section>
+
 
     <div
       v-if="mostrarModalEliminar"
@@ -1844,4 +1815,131 @@ watch(
     transition: none !important;
   }
 }
+
+.clientes-lista-wrapper {
+  padding: 1rem;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  transition: 0.3s ease;
+}
+
+.lista-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.lista-scroll {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.clientes-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cliente-item {
+  background: #fafafa;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transition: 0.25s;
+}
+
+.cliente-item:hover {
+  background: #f0f7ff;
+  border-color: #2196f3;
+}
+
+.cliente-nombre {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.cliente-detalles,
+.cliente-email,
+.cliente-actividad {
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+  color: #475569;
+}
+
+.cliente-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.btn {
+  border-radius: 6px;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-outline {
+  border: 1px solid #2196f3;
+  background: transparent;
+  color: #2196f3;
+}
+.btn-outline:hover {
+  background: #2196f3;
+  color: white;
+}
+
+.btn-danger {
+  border: 1px solid #e53935;
+  background: #e53935;
+  color: white;
+}
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+.lista-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pager-btn {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.pager-btn:hover {
+  background: #2196f3;
+  color: white;
+}
+
+.page-indicator {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
 </style>
